@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db } from '../db';
+import { db } from '../db/index';
 import { sppg, schools, menus, articles } from '../db/skema';
 import { eq } from 'drizzle-orm';
 
