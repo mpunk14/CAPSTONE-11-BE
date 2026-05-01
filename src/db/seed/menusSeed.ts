@@ -1,0 +1,123 @@
+import { sppgSeed } from './sppgSeed';
+
+const menuTemplates = [
+  {
+    menuDate: '2026-04-27',
+    rice: 'Nasi Putih',
+    sideDish: 'Ayam Kecap, Tempe Orek, dan Sayur Bening',
+    fruit: 'Pisang',
+    calories: '625.00',
+    protein: '26.00',
+    carbohydrate: '82.00',
+    fat: '16.00',
+  },
+  {
+    menuDate: '2026-04-28',
+    rice: 'Nasi Merah',
+    sideDish: 'Ikan Tongkol Balado, Tahu Kukus, dan Capcay',
+    fruit: 'Jeruk',
+    calories: '645.00',
+    protein: '29.00',
+    carbohydrate: '78.00',
+    fat: '18.00',
+  },
+  {
+    menuDate: '2026-04-29',
+    rice: 'Nasi Putih',
+    sideDish: 'Semur Daging, Telur Dadar, dan Tumis Buncis',
+    fruit: 'Semangka',
+    calories: '670.00',
+    protein: '31.00',
+    carbohydrate: '84.00',
+    fat: '19.00',
+  },
+  {
+    menuDate: '2026-04-30',
+    rice: 'Nasi Uduk',
+    sideDish: 'Ayam Goreng Lengkuas, Perkedel, dan Lalap Timun',
+    fruit: 'Apel',
+    calories: '690.00',
+    protein: '28.00',
+    carbohydrate: '88.00',
+    fat: '21.00',
+  },
+  {
+    menuDate: '2026-05-01',
+    rice: 'Nasi Putih',
+    sideDish: 'Soto Ayam, Tahu Bacem, dan Sayur Sop',
+    fruit: 'Pepaya',
+    calories: '635.00',
+    protein: '27.00',
+    carbohydrate: '81.00',
+    fat: '17.00',
+  },
+  {
+    menuDate: '2026-05-04',
+    rice: 'Nasi Kuning',
+    sideDish: 'Ayam Suwir, Telur Balado, dan Urap Sayur',
+    fruit: 'Melon',
+    calories: '680.00',
+    protein: '30.00',
+    carbohydrate: '86.00',
+    fat: '20.00',
+  },
+  {
+    menuDate: '2026-05-05',
+    rice: 'Nasi Putih',
+    sideDish: 'Lele Goreng, Tempe Mendoan, dan Sayur Asem',
+    fruit: 'Pisang',
+    calories: '650.00',
+    protein: '28.00',
+    carbohydrate: '83.00',
+    fat: '18.00',
+  },
+  {
+    menuDate: '2026-05-06',
+    rice: 'Nasi Merah',
+    sideDish: 'Daging Bumbu Bali, Tahu Goreng, dan Cah Kangkung',
+    fruit: 'Jeruk',
+    calories: '665.00',
+    protein: '32.00',
+    carbohydrate: '79.00',
+    fat: '19.00',
+  },
+  {
+    menuDate: '2026-05-07',
+    rice: 'Nasi Putih',
+    sideDish: 'Opor Ayam, Telur Rebus, dan Tumis Labu Siam',
+    fruit: 'Apel',
+    calories: '675.00',
+    protein: '30.00',
+    carbohydrate: '85.00',
+    fat: '20.00',
+  },
+  {
+    menuDate: '2026-05-08',
+    rice: 'Nasi Gurih',
+    sideDish: 'Pepes Ikan, Perkedel Jagung, dan Sup Wortel',
+    fruit: 'Semangka',
+    calories: '640.00',
+    protein: '29.00',
+    carbohydrate: '80.00',
+    fat: '18.00',
+  },
+];
+
+export const menusSeed = sppgSeed.flatMap((unit, unitIndex) =>
+  menuTemplates.map((menu, menuIndex) => {
+    const calorieBump = unitIndex * 5 + (menuIndex % 2) * 3;
+    const proteinBump = unitIndex % 2;
+
+    return {
+      sppgId: unit.id,
+      menuDate: menu.menuDate,
+      rice: menu.rice,
+      sideDish: menu.sideDish,
+      fruit: menu.fruit,
+      calories: (Number(menu.calories) + calorieBump).toFixed(2),
+      protein: (Number(menu.protein) + proteinBump).toFixed(2),
+      carbohydrate: menu.carbohydrate,
+      fat: menu.fat,
+    };
+  }),
+);
