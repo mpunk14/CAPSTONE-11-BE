@@ -1,0 +1,68 @@
+import { ids } from './ids';
+
+export const mealDocumentationSeed = [
+  {
+    sppgId: ids.sppg.kebayoran,
+    targetSchoolId: ids.schools.kebayoran01,
+    productionDate: '2026-05-01',
+    photoUrl: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=900&q=80',
+    notes: 'Paket soto ayam siap dikirim untuk SDN Kebayoran Baru 01.',
+    uploadedByRole: 'sppg' as const,
+  },
+  {
+    sppgId: ids.sppg.kebayoran,
+    targetSchoolId: ids.schools.smp12,
+    productionDate: '2026-05-01',
+    photoUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=900&q=80',
+    notes: 'Dokumentasi penerimaan paket oleh petugas SMPN 12 Jakarta.',
+    uploadedByRole: 'school' as const,
+  },
+  {
+    sppgId: ids.sppg.menteng,
+    targetSchoolId: ids.schools.menteng01,
+    productionDate: '2026-04-30',
+    photoUrl: 'https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=900&q=80',
+    notes: 'Menu nasi uduk dan lauk ayam goreng lengkuas.',
+    uploadedByRole: 'sppg' as const,
+  },
+  {
+    sppgId: ids.sppg.menteng,
+    targetSchoolId: ids.schools.gondangdia03,
+    productionDate: '2026-04-29',
+    photoUrl: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=900&q=80',
+    notes: 'Verifikasi kualitas buah dan sayur sebelum distribusi.',
+    uploadedByRole: 'school' as const,
+  },
+  {
+    sppgId: ids.sppg.matraman,
+    targetSchoolId: ids.schools.pisangan07,
+    productionDate: '2026-05-01',
+    photoUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=900&q=80',
+    notes: 'Paket makan tiba sebelum jam istirahat pertama.',
+    uploadedByRole: 'school' as const,
+  },
+  {
+    sppgId: ids.sppg.matraman,
+    targetSchoolId: null,
+    productionDate: '2026-05-01',
+    photoUrl: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=900&q=80',
+    notes: 'Persiapan umum dapur sebelum pembagian rute Matraman.',
+    uploadedByRole: 'sppg' as const,
+  },
+  {
+    sppgId: ids.sppg.priok,
+    targetSchoolId: ids.schools.smp95,
+    productionDate: '2026-04-30',
+    photoUrl: 'https://images.unsplash.com/photo-1506368249639-73a05d6f6488?w=900&q=80',
+    notes: 'Paket siap kirim untuk rute Tanjung Priok.',
+    uploadedByRole: 'sppg' as const,
+  },
+  {
+    sppgId: ids.sppg.cengkareng,
+    targetSchoolId: ids.schools.rawaBuaya01,
+    productionDate: '2026-04-29',
+    photoUrl: 'https://images.unsplash.com/photo-1528712306091-ed0763094c98?w=900&q=80',
+    notes: 'Dokumentasi penerimaan nasi kuning dan ayam suwir.',
+    uploadedByRole: 'school' as const,
+  },
+];
