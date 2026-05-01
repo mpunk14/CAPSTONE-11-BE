@@ -1,48 +1,21 @@
-import { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { JwtPayload } from "../types/user.type";
 
-type AuthUser = {
-  id: string;
-  email: string;
-  role: 'sppg' | 'school';
-};
-
-const isAuthUser = (payload: unknown): payload is AuthUser => {
-  if (!payload || typeof payload !== 'object') return false;
-
-  const user = payload as Record<string, unknown>;
-  return (
-    typeof user.id === 'string' &&
-    typeof user.email === 'string' &&
-    (user.role === 'sppg' || user.role === 'school')
-  );
-};
-
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const verifyToken = (req: Request, res: Response, next: NextFunction): any => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Token tidak ditemukan' });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "Token tidak ditemukan / Invalid Format" });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.split(" ")[1];
 
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET);
-
-    if (!isAuthUser(payload)) {
-      return res.status(401).json({ message: 'Token tidak valid' });
-    }
-
-    req.user = {
-      id: payload.id,
-      email: payload.email,
-      role: payload.role,
-    };
-
-    return next();
-  } catch {
-    return res.status(401).json({ message: 'Token tidak valid' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
+    req.user = decoded; // Inject data user ke dalam request
+    next(); // Lanjut ke controller
+  } catch (error) {
+    return res.status(401).json({ success: false, message: "Token tidak valid atau sudah expired" });
   }
 };

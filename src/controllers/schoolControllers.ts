@@ -1,38 +1,66 @@
-import { Request, Response } from 'express';
-import { db } from '../db';
-import { schoolReports, notifications } from '../db/skema';
-import { eq } from 'drizzle-orm';
+import { Request, Response } from "express";
+import { db } from "../db/index"; 
+import { eq } from "drizzle-orm";
+import { schools } from "../db/skema"; // Pastikan tetap pakai skema.ts
 
-export const kirimLaporan = async (req: Request, res: Response) => {
+// GET semua data sekolah
+export const getAllSekolah = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { schoolId, sppgId, note, rating } = req.body;
-    if (!schoolId || !sppgId || !note) {
-      return res.status(400).json({ message: 'schoolId, sppgId, dan note wajib diisi' });
-    }
-    const [laporan] = await db.insert(schoolReports).values({
-      schoolId, sppgId, note,
-      rating: rating ? parseInt(rating) : null,
-      status: 'submitted',
-    }).returning();
-    await db.insert(notifications).values({
-      sppgId, schoolId,
-      type: 'notification',
-      message: `Laporan baru diterima dari sekolah.`,
-      status: 'new',
+    const data = await db.query.schools.findMany();
+    
+    return res.status(200).json({ 
+      success: true, 
+      data 
     });
-    return res.status(201).json({ message: 'Laporan berhasil dikirim', data: laporan });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
+    console.error("Error GET getAllSekolah:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error" 
+    });
   }
 };
 
-export const getRiwayatLaporan = async (req: Request, res: Response) => {
+// GET detail sekolah berdasarkan ID + nama SPPG mitra
+export const getSekolahById = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { sekolah_id } = req.query;
-    if (!sekolah_id) return res.status(400).json({ message: 'sekolah_id wajib diisi' });
-    const data = await db.select().from(schoolReports).where(eq(schoolReports.schoolId, sekolah_id as string));
-    return res.json(data);
+    
+    const id = req.params.id as string;
+
+    if (!id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "ID tidak boleh kosong" 
+      });
+    }
+
+    const data = await db.query.schools.findFirst({
+      where: eq(schools.id, id), 
+      with: {
+        sppg: {
+          columns: {
+            nama: true 
+          }
+        }
+      },
+    });
+
+    if (!data) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Data Sekolah tidak ditemukan" 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      data 
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
+    console.error("Error GET getSekolahById:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error" 
+    });
   }
 };

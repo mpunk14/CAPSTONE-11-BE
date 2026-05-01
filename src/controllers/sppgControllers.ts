@@ -1,39 +1,62 @@
-import { Request, Response } from 'express';
-import { db } from '../db';
-import { notifications, menus } from '../db/skema';
-import { eq } from 'drizzle-orm';
+import { Request, Response } from "express";
+import { db } from "../db"; 
+import { eq } from "drizzle-orm";
+import { sppg } from "../db/skema"; // Menggunakan skema.ts
 
-type IdParams = { id: string };
-
-export const getNotifikasi = async (req: Request, res: Response) => {
+// GET semua data SPPG
+export const getAllSppg = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { sppg_id } = req.query;
-    if (!sppg_id) return res.status(400).json({ message: 'sppg_id wajib diisi' });
-    const data = await db.select().from(notifications).where(eq(notifications.sppgId, sppg_id as string));
-    return res.json(data);
+    const data = await db.query.sppg.findMany();
+    
+    return res.status(200).json({ 
+      success: true, 
+      data 
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
+    console.error("Error GET getAllSppg:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error" 
+    });
   }
 };
 
-export const getNotifikasiById = async (req: Request<IdParams>, res: Response) => {
+// GET detail SPPG berdasarkan ID + list sekolah yang dilayani
+export const getSppgById = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
-    const [data] = await db.select().from(notifications).where(eq(notifications.id, id));
-    if (!data) return res.status(404).json({ message: 'Notifikasi tidak ditemukan' });
-    return res.json(data);
-  } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
-  }
-};
+   
+    const id = req.params.id;
+ 
+    if (!id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "ID tidak boleh kosong" 
+      });
+    }
 
-export const getRiwayatMenu = async (req: Request, res: Response) => {
-  try {
-    const { sppg_id } = req.query;
-    if (!sppg_id) return res.status(400).json({ message: 'sppg_id wajib diisi' });
-    const data = await db.select().from(menus).where(eq(menus.sppgId, sppg_id as string));
-    return res.json(data);
+    const data = await db.query.sppg.findFirst({
+      where: eq(sppg.id, id), 
+      with: {
+        sekolah: true 
+      },
+    });
+
+    if (!data) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Data SPPG tidak ditemukan" 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      data 
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
+    console.error("Error GET getSppgById:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error" 
+    });
   }
 };
