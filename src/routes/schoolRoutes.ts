@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { kirimLaporan, getRiwayatLaporan } from '../controllers/schoolControllers';
+import { getAllSekolah, getSekolahById } from '../controllers/schoolControllers';
 
 const router = Router();
-router.post('/laporan', kirimLaporan);
-router.get('/laporan', getRiwayatLaporan);
+
+router.get('/', getAllSekolah);
+router.get('/:id', getSekolahById);
+
 export default router;

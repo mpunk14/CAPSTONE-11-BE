@@ -3,14 +3,17 @@ import { loginService } from "../services/auth.service";
 
 export const login = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { email, password } = req.body;
+    const { email, identifier, password, role } = req.body;
+    const credential = identifier || email;
 
-    // Validasi input dasar
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Email dan Password wajib diisi!" });
+    if (!credential || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Identifier/email dan password wajib diisi",
+      });
     }
 
-    const result = await loginService(email, password);
+    const result = await loginService(credential, password, role);
     return res.status(result.status).json(result.data);
     
   } catch (error) {
@@ -21,10 +24,11 @@ export const login = async (req: Request, res: Response): Promise<any> => {
 
 // Contoh Controller untuk Protected Route
 export const dashboard = async (req: Request, res: Response): Promise<any> => {
-  // req.user di-inject dari middleware verifyToken
+  const authRequest = req as Request & { user?: unknown };
+
   return res.status(200).json({
     success: true,
     message: "Selamat datang di dashboard rahasia!",
-    user: req.user, 
+    user: authRequest.user,
   });
 };

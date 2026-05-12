@@ -4,10 +4,7 @@ import { uploadFile } from "../middlewares/uploadMiddleware";
 
 const router = Router();
 
-// Endpoint untuk upload (foto adalah nama field/key di form-data)
 router.post("/", uploadFile.single("foto"), createLaporan);
-
-// Endpoint untuk get (mencakup filter sppg_id dan sekolah_id via query params)
 router.get("/", getLaporan);
 router.get("/:id", getLaporanById);
 

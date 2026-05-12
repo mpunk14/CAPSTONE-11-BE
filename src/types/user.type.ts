@@ -1,12 +1,12 @@
 export interface User {
-  id: number;
+  id: string;
   email: string;
   passwordHash: string;
-  role: "sppg" | "sekolah";
+  role: "sppg" | "school";
 }
 
 export interface JwtPayload {
-  id: number;
+  id: string;
   email: string;
-  role: "sppg" | "sekolah";
+  role: "sppg" | "school";
 }

@@ -13,8 +13,9 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction): an
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-    req.user = decoded; // Inject data user ke dalam request
-    next(); // Lanjut ke controller
+    const authRequest = req as Request & { user?: JwtPayload };
+    authRequest.user = decoded;
+    next();
   } catch (error) {
     return res.status(401).json({ success: false, message: "Token tidak valid atau sudah expired" });
   }

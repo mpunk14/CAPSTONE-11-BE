@@ -1,11 +1,14 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "./skema"; // Udah disesuaikan pakai skema.ts
+import { drizzle } from "drizzle-orm/postgres-js";
 import "dotenv/config";
+import postgres from "postgres";
+import * as schema from "./skema";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const connectionString = process.env.DATABASE_URL;
 
-// Export 'db' biar bisa di-import sama controller kamu
-export const db = drizzle(pool, { schema });
+if (!connectionString) {
+  console.warn("DATABASE_URL is missing. Database queries will use postgres-js default connection settings.");
+}
+
+const client = connectionString ? postgres(connectionString) : postgres();
+
+export const db = drizzle(client, { schema });
