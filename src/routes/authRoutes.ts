@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { login, dashboard } from "../controllers/authControllers";
+import { register, login, dashboard } from "../controllers/authControllers";
 import { verifyToken } from "../middlewares/authMiddleware";
 
 const router = Router();
 
+router.post("/register", register);
 router.post("/login", login);
 
 // Endpoint GET /dashboard dilindungi oleh verifyToken middleware

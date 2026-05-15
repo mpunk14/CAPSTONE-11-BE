@@ -1,5 +1,15 @@
 import { Request, Response } from "express";
-import { loginService } from "../services/auth.service";
+import { loginService, registerService } from "../services/auth.service";
+
+export const register = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const result = await registerService(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("Register Error:", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 
 export const login = async (req: Request, res: Response): Promise<any> => {
   try {

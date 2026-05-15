@@ -137,7 +137,17 @@ export const getNotifikasi = async (req: Request, res: Response) => {
       data = data.filter((item) => item.schoolId === schoolId);
     }
 
-    return res.json({ success: true, data });
+    const allSchools = await db.select().from(schools);
+    const mappedData = data.map((item) => {
+      const school = allSchools.find((candidate) => candidate.id === item.schoolId);
+
+      return {
+        ...item,
+        schoolName: school?.schoolName ?? null,
+      };
+    });
+
+    return res.json({ success: true, data: mappedData });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }

@@ -4,10 +4,17 @@ import { eq } from "drizzle-orm";
 import { schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 
+type SppgRow = typeof sppg.$inferSelect;
+
+const mapSppgForFe = (item: SppgRow) => ({
+  ...item,
+  staffCount: 0,
+});
+
 // GET semua data SPPG
 export const getAllSppg = async (req: Request, res: Response): Promise<any> => {
   try {
-    const data = await db.select().from(sppg);
+    const data = (await db.select().from(sppg)).map(mapSppgForFe);
     
     return res.status(200).json({ 
       success: true, 
@@ -44,7 +51,7 @@ export const getSppgById = async (req: Request, res: Response): Promise<any> => 
     }
 
     const servedSchools = await db.select().from(schools).where(eq(schools.sppgId, id));
-    const data = { ...sppgData, schools: servedSchools };
+    const data = { ...mapSppgForFe(sppgData), schools: servedSchools };
 
     return res.status(200).json({ 
       success: true, 
