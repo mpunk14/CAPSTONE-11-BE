@@ -1,7 +1,7 @@
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import path from "path";
+import "./config/loadEnv";
 
 import authRoutes from "./routes/authRoutes";
 import laporanRoutes from "./routes/laporanRoutes";
@@ -9,8 +9,6 @@ import notifikasiRoutes from "./routes/notifikasiRoutes";
 import publicRoutes from "./routes/publicRoutes";
 import sekolahRoutes from "./routes/schoolRoutes";
 import sppgRoutes from "./routes/sppgRoutes";
-
-dotenv.config();
 
 const app = express();
 

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv';
 
 const requireEnv = (name: string): string => {
   const value = process.env[name];
