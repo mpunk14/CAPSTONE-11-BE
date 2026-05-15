@@ -6,6 +6,7 @@ import { isUuid } from "../utils/uuid";
 
 type SchoolRow = typeof schools.$inferSelect;
 type SppgRow = typeof sppg.$inferSelect;
+type MenuRow = typeof menus.$inferSelect;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -15,15 +16,50 @@ const getString = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const mapSchoolForFe = (school: SchoolRow) => ({
+const mapMenuTitle = (menu: MenuRow | null) => {
+  if (!menu) return "Menu belum tersedia";
+
+  return [menu.rice, menu.sideDish, menu.fruit].filter(Boolean).join(", ");
+};
+
+const mapMenuDetail = (menu: MenuRow | null) => {
+  if (!menu) return "Detail menu belum tersedia";
+
+  return `Tanggal ${menu.menuDate}`;
+};
+
+const mapNutrition = (menu: MenuRow | null) => {
+  if (!menu) return "Target Nutrisi: -";
+
+  return `Protein ${menu.protein ?? "-"}g | Karbo ${menu.carbohydrate ?? "-"}g | Lemak ${menu.fat ?? "-"}g`;
+};
+
+const findDisplayMenu = (menuData: MenuRow[]) => {
+  const sorted = menuData.sort((a, b) => String(b.menuDate).localeCompare(String(a.menuDate)));
+  return sorted.find((item) => String(item.menuDate) === today()) ?? sorted[0] ?? null;
+};
+
+const mapSchoolForFe = (school: SchoolRow, partnerSppg: SppgRow | null = null, menu: MenuRow | null = null) => ({
   ...school,
   name: school.schoolName,
   nama: school.schoolName,
   alamat: school.address,
   studentCount: 0,
+  studentsCount: 0,
+  jumlahSiswa: 0,
   siswa: 0,
   photoUrl: null,
   foto: null,
+  sppgName: partnerSppg?.name ?? null,
+  partnerSppgName: partnerSppg?.name ?? null,
+  affiliatedKitchen: partnerSppg?.name ?? null,
+  sppg: mapSppgForFe(partnerSppg),
+  menuTitle: mapMenuTitle(menu),
+  todayMenuTitle: mapMenuTitle(menu),
+  menuDetail: mapMenuDetail(menu),
+  todayMenuDetail: mapMenuDetail(menu),
+  calories: menu?.calories ?? "-",
+  nutrition: mapNutrition(menu),
 });
 
 const mapSppgForFe = (item: SppgRow | null) => {
@@ -78,7 +114,14 @@ const parseRating = (value: unknown): number | null | undefined => {
 // GET semua data sekolah
 export const getAllSekolah = async (req: Request, res: Response): Promise<any> => {
   try {
-    const data = (await db.select().from(schools)).map(mapSchoolForFe);
+    const schoolData = await db.select().from(schools);
+    const sppgData = await db.select().from(sppg);
+    const menuData = await db.select().from(menus);
+    const data = schoolData.map((school) => {
+      const partnerSppg = sppgData.find((item) => item.id === school.sppgId) ?? null;
+      const schoolMenus = partnerSppg ? menuData.filter((menu) => menu.sppgId === partnerSppg.id) : [];
+      return mapSchoolForFe(school, partnerSppg, findDisplayMenu(schoolMenus));
+    });
     
     return res.status(200).json({ 
       success: true, 
@@ -120,7 +163,8 @@ export const getSekolahById = async (req: Request, res: Response): Promise<any> 
       partnerSppg = foundSppg ?? null;
     }
 
-    const data = { ...mapSchoolForFe(school), sppg: mapSppgForFe(partnerSppg) };
+    const schoolMenus = partnerSppg ? await db.select().from(menus).where(eq(menus.sppgId, partnerSppg.id)) : [];
+    const data = mapSchoolForFe(school, partnerSppg, findDisplayMenu(schoolMenus));
 
     return res.status(200).json({ 
       success: true, 

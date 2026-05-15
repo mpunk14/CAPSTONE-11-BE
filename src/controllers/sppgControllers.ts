@@ -5,16 +5,28 @@ import { schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 
 type SppgRow = typeof sppg.$inferSelect;
+type SchoolRow = typeof schools.$inferSelect;
 
-const mapSppgForFe = (item: SppgRow) => ({
+const mapSppgForFe = (item: SppgRow, servedSchools: SchoolRow[] = []) => ({
   ...item,
+  nama: item.name,
+  kapasitas: item.capacityPerDay,
   staffCount: 0,
+  schoolsServed: servedSchools.length,
+  totalSchoolsServed: servedSchools.length,
+  coverage: `Melayani ${servedSchools.length} sekolah`,
+  schools: servedSchools.map((school) => school.id),
 });
 
 // GET semua data SPPG
 export const getAllSppg = async (req: Request, res: Response): Promise<any> => {
   try {
-    const data = (await db.select().from(sppg)).map(mapSppgForFe);
+    const sppgData = await db.select().from(sppg);
+    const schoolData = await db.select().from(schools);
+    const data = sppgData.map((item) => {
+      const servedSchools = schoolData.filter((school) => school.sppgId === item.id);
+      return mapSppgForFe(item, servedSchools);
+    });
     
     return res.status(200).json({ 
       success: true, 
@@ -51,7 +63,7 @@ export const getSppgById = async (req: Request, res: Response): Promise<any> => 
     }
 
     const servedSchools = await db.select().from(schools).where(eq(schools.sppgId, id));
-    const data = { ...mapSppgForFe(sppgData), schools: servedSchools };
+    const data = { ...mapSppgForFe(sppgData, servedSchools), schoolList: servedSchools };
 
     return res.status(200).json({ 
       success: true, 
