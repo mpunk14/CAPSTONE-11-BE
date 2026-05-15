@@ -44,6 +44,9 @@ export const sppg = pgTable('sppg', {
   lng: decimal('lng', { precision: 10, scale: 7 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  distributedPortions: integer("distributed_portions").default(0),
+staffCount: integer("staff_count").default(0),
+photoUrl: text("photo_url"),
 });
 
 // 3. Schools (Sekolah)
@@ -58,6 +61,8 @@ export const schools = pgTable('schools', {
   lng: decimal('lng', { precision: 10, scale: 7 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  studentCount: integer("student_count").default(0),
+photoUrl: text("photo_url"),
 });
 
 // 4. Articles (Public Content)
