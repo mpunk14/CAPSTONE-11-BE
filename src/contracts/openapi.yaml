@@ -512,8 +512,6 @@ paths:
         - 04 - School Dashboard
       summary: Report History
       operationId: getSchoolReportHistory
-      security:
-        - bearerAuth: []
       responses:
         '200':
           description: Riwayat laporan berhasil diambil.
@@ -528,8 +526,8 @@ paths:
                       $ref: '#/components/schemas/SchoolReportHistoryItem'
                 required:
                   - data
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
 
 components:
   securitySchemes:
@@ -875,10 +873,13 @@ components:
           enum: [active, inactive, maintenance]
         totalPartnerSchools:
           type: integer
+        totalMenus:
+          type: integer
       required:
         - sppgName
         - operationalStatus
         - totalPartnerSchools
+        - totalMenus
 
     NotificationFeedback:
       type: object
@@ -920,9 +921,12 @@ components:
               type: string
             address:
               type: string
+        totalReports:
+          type: integer
       required:
         - schoolName
         - partnerSppg
+        - totalReports
 
     TodayMenu:
       type: object
