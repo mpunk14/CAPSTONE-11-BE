@@ -29,6 +29,7 @@ async function clearExistingData() {
   await db.delete(schema.notifications);
   await db.delete(schema.schoolReports);
   await db.delete(schema.mealDocumentation);
+  await db.delete(schema.menuUploadHistory);
   await db.delete(schema.menus);
   await db.delete(schema.articles);
   await db.delete(schema.schools);

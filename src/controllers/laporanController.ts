@@ -26,6 +26,8 @@ export const createLaporan = async (req: Request, res: Response): Promise<any> =
     const userId = req.user?.id;
     const note = req.body.note ?? req.body.catatan;
     const rating = parseRating(req.body.rating);
+    const attachmentUrl = (req.file as Express.Multer.File & { secure_url?: string; path?: string } | undefined)?.secure_url
+      ?? (req.file as Express.Multer.File & { secure_url?: string; path?: string } | undefined)?.path;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -54,6 +56,7 @@ export const createLaporan = async (req: Request, res: Response): Promise<any> =
       status: "submitted" as LaporanStatus,
       sppgId: school.sppgId,
       schoolId: school.id,
+      attachmentUrl,
       rating,
     };
 

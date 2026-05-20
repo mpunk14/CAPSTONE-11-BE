@@ -332,6 +332,83 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /menu/upload:
+    post:
+      tags:
+        - 03 - SPPG Dashboard
+      summary: Upload Menu CSV
+      operationId: uploadMenuCsv
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File CSV menu yang mengikuti template SIMBA.
+              required:
+                - file
+      responses:
+        '201':
+          description: CSV menu berhasil diunggah.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /menu/riwayat:
+    get:
+      tags:
+        - 03 - SPPG Dashboard
+      summary: Menu Upload History
+      operationId: getMenuUploadHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sppg_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Riwayat upload menu berhasil diambil.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uploadDate:
+                          type: string
+                          format: date-time
+                        fileName:
+                          type: string
+                        status:
+                          type: string
+                          enum: [success, failed]
+                        rowCount:
+                          type: integer
+                  required:
+                    - data
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /sppg/notifications:
     get:
       tags:
@@ -482,7 +559,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               properties:
@@ -492,6 +569,9 @@ paths:
                   type: integer
                   minimum: 1
                   maximum: 5
+                attachment:
+                  type: string
+                  format: binary
               required:
                 - note
       responses:
