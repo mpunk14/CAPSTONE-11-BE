@@ -37,11 +37,14 @@ export const sppg = pgTable('sppg', {
   name: varchar('name', { length: 255 }).notNull(),
   sppgCode: varchar('sppg_code', { length: 50 }).notNull().unique(),
   address: text('address').notNull(),
+  photoUrl: text('photo_url'),
   personInCharge: varchar('person_in_charge', { length: 255 }).notNull(),
   capacityPerDay: integer('capacity_per_day').default(0),
   status: sppgStatusEnum('status').default('active').notNull(),
   lat: decimal('lat', { precision: 10, scale: 7 }),
   lng: decimal('lng', { precision: 10, scale: 7 }),
+  distributedPortions: integer('distributed_portions'),
+  staffCount: integer('staff_count'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -54,8 +57,10 @@ export const schools = pgTable('schools', {
   schoolName: varchar('school_name', { length: 255 }).notNull(),
   npsn: varchar('npsn', { length: 50 }).notNull().unique(),
   address: text('address').notNull(),
+  photoUrl: text('photo_url'),
   lat: decimal('lat', { precision: 10, scale: 7 }),
   lng: decimal('lng', { precision: 10, scale: 7 }),
+  studentCount: integer('student_count'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -119,7 +124,6 @@ export const schoolReports = pgTable('school_reports', {
   schoolId: uuid('school_id').references(() => schools.id).notNull(),
   sppgId: uuid('sppg_id').references(() => sppg.id).notNull(),
   note: text('note').notNull(),
-  attachmentUrl: text('attachment_url'),
   rating: integer('rating'), // 1 sampai 5
   status: reportStatusEnum('status').default('submitted').notNull(),
   submittedAt: timestamp('submitted_at').defaultNow().notNull(),
