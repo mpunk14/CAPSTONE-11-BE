@@ -4,7 +4,6 @@ export interface CreateLaporanDTO {
   schoolId: string;
   sppgId: string;
   note: string;
-  attachmentUrl?: string | null;
   rating?: number | null;
   status: LaporanStatus;
 }
