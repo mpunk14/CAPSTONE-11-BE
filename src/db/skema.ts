@@ -89,6 +89,18 @@ export const menus = pgTable('menus', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const menuUploadStatusEnum = pgEnum('menu_upload_status', ['success', 'failed']);
+
+export const menuUploadHistory = pgTable('menu_upload_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sppgId: uuid('sppg_id').references(() => sppg.id).notNull(),
+  fileName: text('file_name').notNull(),
+  status: menuUploadStatusEnum('status').notNull(),
+  rowCount: integer('row_count').default(0).notNull(),
+  errorMessage: text('error_message'),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+});
+
 // 6. Meal Documentation (Bukti dari SPPG & Sekolah)
 export const mealDocumentation = pgTable('meal_documentation', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -107,6 +119,7 @@ export const schoolReports = pgTable('school_reports', {
   schoolId: uuid('school_id').references(() => schools.id).notNull(),
   sppgId: uuid('sppg_id').references(() => sppg.id).notNull(),
   note: text('note').notNull(),
+  attachmentUrl: text('attachment_url'),
   rating: integer('rating'), // 1 sampai 5
   status: reportStatusEnum('status').default('submitted').notNull(),
   submittedAt: timestamp('submitted_at').defaultNow().notNull(),

@@ -1,4 +1,7 @@
 import { Request, Response } from "express";
+import { eq } from "drizzle-orm";
+import { db } from "../db";
+import { schools } from "../db/skema";
 import { createLaporanService, getSemuaLaporanService, getLaporanByIdService } from "../services/laporan.service";
 import { LaporanStatus } from "../types/laporan.type";
 import { isUuid } from "../utils/uuid";
@@ -20,37 +23,40 @@ const parseRating = (value: unknown): number | null | undefined => {
 
 export const createLaporan = async (req: Request, res: Response): Promise<any> => {
   try {
+    const userId = req.user?.id;
     const note = req.body.note ?? req.body.catatan;
-    const status = (req.body.status ?? "submitted") as LaporanStatus;
-    const sppgId = req.body.sppgId ?? req.body.sppg_id;
-    const schoolId = req.body.schoolId ?? req.body.school_id ?? req.body.sekolah_id;
     const rating = parseRating(req.body.rating);
+    const attachmentUrl = (req.file as Express.Multer.File & { secure_url?: string; path?: string } | undefined)?.secure_url
+      ?? (req.file as Express.Multer.File & { secure_url?: string; path?: string } | undefined)?.path;
 
-    if (!note || !sppgId || !schoolId) {
-      return res.status(400).json({ success: false, message: "Semua field wajib diisi!" });
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    if (!isUuid(sppgId)) {
-      return res.status(400).json({ success: false, message: "Format ID SPPG tidak valid" });
-    }
-
-    if (!isUuid(schoolId)) {
-      return res.status(400).json({ success: false, message: "Format ID Sekolah tidak valid" });
-    }
-
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: "Status laporan tidak valid" });
+    if (!note || typeof note !== "string" || !note.trim()) {
+      return res.status(400).json({ success: false, message: "Catatan wajib diisi" });
     }
 
     if (rating === null) {
       return res.status(400).json({ success: false, message: "Rating harus berupa angka 1 sampai 5" });
     }
 
+    const [school] = await db.select().from(schools).where(eq(schools.userId, userId));
+
+    if (!school) {
+      return res.status(404).json({ success: false, message: "Data sekolah milik user ini tidak ditemukan" });
+    }
+
+    if (!school.sppgId) {
+      return res.status(400).json({ success: false, message: "Sekolah belum terhubung dengan SPPG" });
+    }
+
     const payload = {
-      note,
-      status,
-      sppgId,
-      schoolId,
+      note: note.trim(),
+      status: "submitted" as LaporanStatus,
+      sppgId: school.sppgId,
+      schoolId: school.id,
+      attachmentUrl,
       rating,
     };
 

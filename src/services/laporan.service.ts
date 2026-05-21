@@ -10,6 +10,7 @@ export const createLaporanService = async (data: CreateLaporanDTO) => {
       schoolId: data.schoolId,
       sppgId: data.sppgId,
       note: data.note,
+      attachmentUrl: data.attachmentUrl ?? null,
       rating: data.rating ?? null,
       status: data.status,
     })
