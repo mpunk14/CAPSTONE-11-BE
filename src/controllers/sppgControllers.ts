@@ -122,13 +122,11 @@ const enrichSppg = (
 };
 
 // GET semua data SPPG
-export const getAllSppg = async (req: Request, res: Response): Promise<any> => {
+export const getAllSppg = async (_req: Request, res: Response): Promise<any> => {
   try {
-    const [sppgRows, schoolRows, menuRows, reportRows] = await Promise.all([
+    const [sppgRows, schoolRows] = await Promise.all([
       db.select().from(sppg),
       db.select().from(schools),
-      db.select().from(menus),
-      db.select().from(schoolReports),
     ]);
 
     const schoolsBySppgId = new Map<string, SchoolRow[]>();
@@ -137,34 +135,26 @@ export const getAllSppg = async (req: Request, res: Response): Promise<any> => {
       schoolsBySppgId.set(school.sppgId, [...(schoolsBySppgId.get(school.sppgId) ?? []), school]);
     }
 
-    const menusBySppgId = new Map<string, MenuRow[]>();
-    for (const menu of menuRows) {
-      menusBySppgId.set(menu.sppgId, [...(menusBySppgId.get(menu.sppgId) ?? []), menu]);
-    }
+    const data = sppgRows.map((item) => {
+      const relatedSchools = schoolsBySppgId.get(item.id) ?? [];
+      return {
+        ...item,
+        schools: relatedSchools.map((school) => ({ id: school.id, schoolName: school.schoolName })),
+        schoolIds: relatedSchools.map((school) => school.id),
+        totalPartnerSchools: relatedSchools.length,
+        coverage: `Melayani ${relatedSchools.length} sekolah`,
+      };
+    });
 
-    const reportsBySppgId = new Map<string, ReportRow[]>();
-    for (const report of reportRows) {
-      reportsBySppgId.set(report.sppgId, [...(reportsBySppgId.get(report.sppgId) ?? []), report]);
-    }
-
-    const data = sppgRows.map((item) =>
-      enrichSppg(
-        item,
-        schoolsBySppgId.get(item.id) ?? [],
-        menusBySppgId.get(item.id) ?? [],
-        reportsBySppgId.get(item.id) ?? [],
-      ),
-    );
-    
-    return res.status(200).json({ 
-      success: true, 
-      data 
+    return res.status(200).json({
+      success: true,
+      data,
     });
   } catch (error) {
     console.error("Error GET getAllSppg:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Internal Server Error" 
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
     });
   }
 };
