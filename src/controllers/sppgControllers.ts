@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { db } from "../db"; 
-import { eq, inArray } from "drizzle-orm";
-import { mealDocumentation, menus, schoolReports, schools, sppg } from "../db/skema";
+import { and, eq, inArray } from "drizzle-orm";
+import { menus, schoolReports, schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
+import { cloudinary } from "../config/cloudinary";
 
 type SppgRow = typeof sppg.$inferSelect;
 type SchoolRow = typeof schools.$inferSelect;
@@ -275,6 +276,23 @@ const parseTargetSchoolIds = (value: unknown): string[] => {
   return [];
 };
 
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+
+const resolveCloudinaryImageUrl = (
+  file?: Express.Multer.File & { secure_url?: string; path?: string; url?: string; filename?: string; public_id?: string }
+) => {
+  const directUrl = file?.secure_url ?? file?.path ?? (file as any)?.url ?? null;
+  if (directUrl && isHttpUrl(directUrl)) return directUrl;
+
+  const publicId = file?.public_id ?? (file as any)?.filename ?? null;
+  if (publicId && typeof publicId === "string") {
+    const builtUrl = cloudinary.url(publicId, { secure: true });
+    if (builtUrl && isHttpUrl(builtUrl)) return builtUrl;
+  }
+
+  return null;
+};
+
 export const createMealDocumentation = async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user?.id;
@@ -282,20 +300,16 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
     const productionDate = typeof req.body.productionDate === "string" && req.body.productionDate.trim()
       ? req.body.productionDate.trim()
       : new Date().toISOString().slice(0, 10);
-    const targetSchoolIds = parseTargetSchoolIds(req.body.targetSchoolIds);
     const file = req.file as Express.Multer.File & { secure_url?: string; path?: string; url?: string; filename?: string; public_id?: string } | undefined;
-    const photoUrl = file?.secure_url ?? file?.path ?? (file as any)?.url ?? (file as any)?.filename ?? null;
+    const photoUrl = resolveCloudinaryImageUrl(file);
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     if (!photoUrl) {
-      return res.status(400).json({ success: false, message: "Foto dokumentasi wajib diunggah" });
+      return res.status(400).json({ success: false, message: "Upload foto ke Cloudinary gagal. Coba unggah ulang." });
     }
-
-    // notes and targetSchoolIds are optional from the frontend. If notes not provided, store empty string.
-    // If targetSchoolIds is empty, treat as a general documentation (no specific target school).
 
     const [sppgData] = await db.select().from(sppg).where(eq(sppg.userId, userId));
 
@@ -303,61 +317,79 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
     }
 
-    let data: any[] = [];
+    const existingMenus = await db
+      .select()
+      .from(menus)
+      .where(and(eq(menus.sppgId, sppgData.id), eq(menus.menuDate, productionDate)));
 
-    if (targetSchoolIds.length) {
-      const validSchools = await db.select({ id: schools.id }).from(schools).where(inArray(schools.id, targetSchoolIds));
-      const validSchoolIds = new Set(validSchools.map((item) => item.id));
-      const invalidSchoolIds = targetSchoolIds.filter((id) => !validSchoolIds.has(id));
-
-      if (invalidSchoolIds.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Ada targetSchoolIds yang tidak valid",
-          invalidSchoolIds,
-        });
-      }
-
-      const inserted = await Promise.all(
-        targetSchoolIds.map((targetSchoolId) =>
-          db
-            .insert(mealDocumentation)
-            .values({
-              sppgId: sppgData.id,
-              targetSchoolId,
-              productionDate,
-              photoUrl,
-              notes,
-              uploadedByRole: "sppg",
-            })
-            .returning(),
-        ),
-      );
-
-      data = inserted.flat();
-    } else {
-      const inserted = await db
-        .insert(mealDocumentation)
-        .values({
-          sppgId: sppgData.id,
-          targetSchoolId: null,
-          productionDate,
-          photoUrl,
-          notes,
-          uploadedByRole: "sppg",
+    if (existingMenus.length > 0) {
+      const currentMenu = existingMenus[0];
+      const [updatedMenu] = await db
+        .update(menus)
+        .set({
+          menuImageUrl: photoUrl,
+          updatedAt: new Date(),
         })
+        .where(eq(menus.id, currentMenu.id))
         .returning();
 
-      data = inserted;
+      return res.status(200).json({
+        success: true,
+        message: "Dokumentasi menu harian berhasil diperbarui",
+        data: [updatedMenu],
+      });
     }
+
+    const [insertedMenu] = await db
+      .insert(menus)
+      .values({
+        sppgId: sppgData.id,
+        menuDate: productionDate,
+        menuImageUrl: photoUrl,
+      })
+      .returning();
 
     return res.status(201).json({
       success: true,
-      message: "Dokumentasi makanan berhasil disimpan",
-      data,
+      message: "Dokumentasi menu harian berhasil disimpan",
+      data: [insertedMenu],
     });
   } catch (error) {
     console.error("Error POST createMealDocumentation:", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+export const getMealDocumentationHistory = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const [sppgData] = await db.select().from(sppg).where(eq(sppg.userId, userId));
+    if (!sppgData) {
+      return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
+    }
+
+    const menuRows = await db.select().from(menus).where(eq(menus.sppgId, sppgData.id));
+    const data = [...menuRows]
+      .filter((row) => typeof row.menuImageUrl === "string" && row.menuImageUrl.trim().length > 0)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 20)
+      .map((row) => ({
+        id: row.id,
+        photoUrl: row.menuImageUrl,
+        notes: row.rice ?? "Dokumentasi menu",
+        productionDate: row.menuDate,
+        createdAt: row.updatedAt,
+        schoolId: null,
+        schoolName: "Menu Harian",
+      }));
+
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Error GET getMealDocumentationHistory:", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
