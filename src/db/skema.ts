@@ -83,6 +83,7 @@ export const menus = pgTable('menus', {
   id: uuid('id').primaryKey().defaultRandom(),
   sppgId: uuid('sppg_id').references(() => sppg.id).notNull(),
   menuDate: date('menu_date').notNull(),
+  menuImageUrl: text('image_url'),
   rice: varchar('rice', { length: 255 }),
   sideDish: varchar('side_dish', { length: 255 }),
   fruit: varchar('fruit', { length: 255 }),
