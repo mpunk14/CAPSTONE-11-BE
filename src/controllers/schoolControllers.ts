@@ -156,6 +156,18 @@ const mapSchoolReportNotes = (reports: ReportRow[]) =>
     kutipan: report.status,
   }));
 
+const createSchoolNotification = async (school: SchoolRow, message: string) => {
+  if (!school.sppgId) return;
+
+  await db.insert(notifications).values({
+    sppgId: school.sppgId,
+    schoolId: school.id,
+    type: "notification",
+    message,
+    status: "new",
+  });
+};
+
 const normalizeSppgForSchool = (partnerSppg: SppgRow | null) => {
   if (!partnerSppg) return null;
 
@@ -407,6 +419,8 @@ export const createSekolahDokumentasi = async (req: Request, res: Response): Pro
       return res.status(400).json({ success: false, message: "photoUrl wajib diisi" });
     }
 
+    const caption = String(req.body.caption ?? req.body.notes ?? "Dokumentasi menu").trim();
+
     const [inserted] = await db
       .insert(mealDocumentation)
       .values({
@@ -414,10 +428,15 @@ export const createSekolahDokumentasi = async (req: Request, res: Response): Pro
         targetSchoolId: school.id,
         productionDate: new Date().toISOString().slice(0, 10),
         photoUrl,
-        notes: req.body.caption ?? req.body.notes ?? "Dokumentasi menu",
+        notes: caption || "Dokumentasi menu",
         uploadedByRole: "school",
       })
       .returning();
+
+    await createSchoolNotification(
+      school,
+      `${school.schoolName || "Sekolah"} mengunggah dokumentasi menu${caption ? `: ${caption}` : ""}`,
+    );
 
     return res.status(201).json({ success: true, data: mapDocumentation([inserted])[0] });
   } catch (error) {
@@ -438,16 +457,26 @@ export const createSekolahCatatan = async (req: Request, res: Response): Promise
     const note = req.body.title ?? req.body.message ?? req.body.note;
     if (!note) return res.status(400).json({ success: false, message: "Catatan wajib diisi" });
 
+    const normalizedNote = String(note).trim();
+    if (!normalizedNote) {
+      return res.status(400).json({ success: false, message: "Catatan wajib diisi" });
+    }
+
     const [inserted] = await db
       .insert(schoolReports)
       .values({
         schoolId: school.id,
         sppgId: school.sppgId,
-        note,
+        note: normalizedNote,
         rating: req.body.rating ?? null,
         status: "submitted",
       })
       .returning();
+
+    await createSchoolNotification(
+      school,
+      `${school.schoolName || "Sekolah"} mengirimkan catatan pengiriman: ${normalizedNote}`,
+    );
 
     return res.status(201).json({ success: true, data: mapSchoolReportNotes([inserted])[0] });
   } catch (error) {
