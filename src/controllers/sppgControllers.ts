@@ -114,7 +114,7 @@ const enrichSppg = (
       protein: menu?.protein ?? "-",
       carbs: menu?.carbohydrate ?? "-",
       fat: menu?.fat ?? "-",
-      fiber: "-",
+      fiber: menu?.fiber ?? "-",
     },
     weeklyMenu: mapWeeklyMenu(menuRows),
     schools: servedSchools.map(mapSchoolForSppgProfile),
