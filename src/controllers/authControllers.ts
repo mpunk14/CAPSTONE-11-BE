@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { loginService, registerService } from "../services/auth.service";
+import { getMyProfileService, loginService, registerService, updateMyProfileService } from "../services/auth.service";
 
 export const login = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -53,4 +53,32 @@ export const dashboard = async (req: Request, res: Response): Promise<any> => {
     message: "Selamat datang di dashboard rahasia!",
     user: authRequest.user,
   });
+};
+
+export const getMyProfile = async (req: Request, res: Response): Promise<any> => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const result = await getMyProfileService(req.user.id, req.user.role);
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("Get My Profile Error:", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+export const updateMyProfile = async (req: Request, res: Response): Promise<any> => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const result = await updateMyProfileService(req.user.id, req.user.role, req.body ?? {});
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("Update My Profile Error:", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
 };

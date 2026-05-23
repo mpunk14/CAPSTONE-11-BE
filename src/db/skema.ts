@@ -90,6 +90,7 @@ export const menus = pgTable('menus', {
   protein: decimal('protein', { precision: 5, scale: 2 }),
   carbohydrate: decimal('carbohydrate', { precision: 5, scale: 2 }),
   fat: decimal('fat', { precision: 5, scale: 2 }),
+  fiber: decimal('fiber', { precision: 5, scale: 2 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

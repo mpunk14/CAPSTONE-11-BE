@@ -52,6 +52,7 @@ const mapNutrition = (menu: MenuRow | null) => [
   { lbl: "PROTEIN", val: menu?.protein ?? "-", unit: "g" },
   { lbl: "KARBOHIDRAT", val: menu?.carbohydrate ?? "-", unit: "g" },
   { lbl: "LEMAK", val: menu?.fat ?? "-", unit: "g" },
+  { lbl: "SERAT", val: menu?.fiber ?? "-", unit: "g" },
 ];
 
 const mapDocumentation = (docs: DocumentationRow[]) =>

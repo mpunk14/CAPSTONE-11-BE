@@ -166,3 +166,210 @@ export const registerService = async (payload: RegisterPayload) => {
     throw error;
   }
 };
+
+const toNullableString = (value: unknown) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
+const toNullableNumberString = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return undefined;
+  return String(numberValue);
+};
+
+const toNullableInt = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  if (!Number.isInteger(numberValue)) return undefined;
+  return numberValue;
+};
+
+export const getMyProfileService = async (userId: string, role: string) => {
+  const [user] = await db
+    .select({ id: users.id, email: users.email, role: users.role })
+    .from(users)
+    .where(eq(users.id, userId));
+
+  if (!user) {
+    return { status: 404, data: { success: false, message: "User tidak ditemukan" } };
+  }
+
+  if (role === "sppg") {
+    const [profile] = await db
+      .select()
+      .from(sppg)
+      .where(eq(sppg.userId, userId));
+
+    if (!profile) {
+      return { status: 404, data: { success: false, message: "Profil SPPG tidak ditemukan" } };
+    }
+
+    return {
+      status: 200,
+      data: {
+        success: true,
+        data: {
+          user,
+          profile,
+        },
+      },
+    };
+  }
+
+  const [profile] = await db
+    .select()
+    .from(schools)
+    .where(eq(schools.userId, userId));
+
+  if (!profile) {
+    return { status: 404, data: { success: false, message: "Profil Sekolah tidak ditemukan" } };
+  }
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      data: {
+        user,
+        profile,
+      },
+    },
+  };
+};
+
+export const updateMyProfileService = async (userId: string, role: string, payload: Record<string, unknown>) => {
+  try {
+    const email = toNullableString(payload.email);
+    const password = toNullableString(payload.password);
+
+    return await db.transaction(async (tx) => {
+      const [existingUser] = await tx.select().from(users).where(eq(users.id, userId));
+      if (!existingUser) {
+        return { status: 404, data: { success: false, message: "User tidak ditemukan" } };
+      }
+
+      const userPatch: Partial<typeof users.$inferInsert> = {
+        updatedAt: new Date(),
+      };
+
+      if (email !== undefined) userPatch.email = email ?? existingUser.email;
+      if (password) userPatch.password = await bcrypt.hash(password, 10);
+
+      await tx.update(users).set(userPatch).where(eq(users.id, userId));
+
+      if (role === "sppg") {
+        const [currentProfile] = await tx.select().from(sppg).where(eq(sppg.userId, userId));
+        if (!currentProfile) {
+          return { status: 404, data: { success: false, message: "Profil SPPG tidak ditemukan" } };
+        }
+
+        const lat = toNullableNumberString(payload.lat);
+        const lng = toNullableNumberString(payload.lng);
+        const capacityPerDay = toNullableInt(payload.capacityPerDay);
+        const staffCount = toNullableInt(payload.staffCount);
+
+        if (lat === undefined || lng === undefined || capacityPerDay === undefined || staffCount === undefined) {
+          return { status: 400, data: { success: false, message: "Format data profil tidak valid" } };
+        }
+
+        const profilePatch: Partial<typeof sppg.$inferInsert> = {
+          updatedAt: new Date(),
+        };
+
+        const name = toNullableString(payload.name);
+        const sppgCode = toNullableString(payload.sppgCode);
+        const address = toNullableString(payload.address);
+        const personInCharge = toNullableString(payload.personInCharge);
+        const photoUrl = toNullableString(payload.photoUrl);
+
+        if (name !== undefined) profilePatch.name = name ?? currentProfile.name;
+        if (sppgCode !== undefined) profilePatch.sppgCode = sppgCode ?? currentProfile.sppgCode;
+        if (address !== undefined) profilePatch.address = address ?? currentProfile.address;
+        if (personInCharge !== undefined) profilePatch.personInCharge = personInCharge ?? currentProfile.personInCharge;
+        if (photoUrl !== undefined) profilePatch.photoUrl = photoUrl;
+        if (lat !== null) profilePatch.lat = lat;
+        if (lng !== null) profilePatch.lng = lng;
+        if (capacityPerDay !== null) profilePatch.capacityPerDay = capacityPerDay;
+        if (staffCount !== null) profilePatch.staffCount = staffCount;
+
+        await tx.update(sppg).set(profilePatch).where(eq(sppg.userId, userId));
+
+        const [updatedUser] = await tx
+          .select({ id: users.id, email: users.email, role: users.role })
+          .from(users)
+          .where(eq(users.id, userId));
+        const [updatedProfile] = await tx.select().from(sppg).where(eq(sppg.userId, userId));
+
+        return {
+          status: 200,
+          data: {
+            success: true,
+            message: "Profil berhasil diperbarui",
+            data: { user: updatedUser, profile: updatedProfile },
+          },
+        };
+      }
+
+      const [currentProfile] = await tx.select().from(schools).where(eq(schools.userId, userId));
+      if (!currentProfile) {
+        return { status: 404, data: { success: false, message: "Profil Sekolah tidak ditemukan" } };
+      }
+
+      const lat = toNullableNumberString(payload.lat);
+      const lng = toNullableNumberString(payload.lng);
+      const studentCount = toNullableInt(payload.studentCount);
+
+      if (lat === undefined || lng === undefined || studentCount === undefined) {
+        return { status: 400, data: { success: false, message: "Format data profil tidak valid" } };
+      }
+
+      const profilePatch: Partial<typeof schools.$inferInsert> = {
+        updatedAt: new Date(),
+      };
+
+      const schoolName = toNullableString(payload.schoolName);
+      const npsn = toNullableString(payload.npsn);
+      const address = toNullableString(payload.address);
+      const photoUrl = toNullableString(payload.photoUrl);
+      const sppgId = toNullableString(payload.sppgId);
+
+      if (schoolName !== undefined) profilePatch.schoolName = schoolName ?? currentProfile.schoolName;
+      if (npsn !== undefined) profilePatch.npsn = npsn ?? currentProfile.npsn;
+      if (address !== undefined) profilePatch.address = address ?? currentProfile.address;
+      if (photoUrl !== undefined) profilePatch.photoUrl = photoUrl;
+      if (sppgId !== undefined) profilePatch.sppgId = sppgId;
+      if (lat !== null) profilePatch.lat = lat;
+      if (lng !== null) profilePatch.lng = lng;
+      if (studentCount !== null) profilePatch.studentCount = studentCount;
+
+      await tx.update(schools).set(profilePatch).where(eq(schools.userId, userId));
+
+      const [updatedUser] = await tx
+        .select({ id: users.id, email: users.email, role: users.role })
+        .from(users)
+        .where(eq(users.id, userId));
+      const [updatedProfile] = await tx.select().from(schools).where(eq(schools.userId, userId));
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          message: "Profil berhasil diperbarui",
+          data: { user: updatedUser, profile: updatedProfile },
+        },
+      };
+    });
+  } catch (error: any) {
+    if (error?.code === "23505") {
+      return {
+        status: 409,
+        data: { success: false, message: "Data unik sudah digunakan (email/kode/NPSN)" },
+      };
+    }
+
+    throw error;
+  }
+};
