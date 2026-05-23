@@ -197,6 +197,93 @@ export const getAllSekolah = async (_req: Request, res: Response) => {
   }
 };
 
+export const getOverlayMap = async (_req: Request, res: Response) => {
+  try {
+    const [sppgRows, schoolRows] = await Promise.all([
+      db.select().from(sppg),
+      db.select().from(schools),
+    ]);
+
+    const sppgPoints = sppgRows.map((unit) => {
+      const lat = parseCoordinate(unit.lat);
+      const lng = parseCoordinate(unit.lng);
+      return {
+        id: unit.id,
+        type: 'sppg',
+        name: unit.name,
+        address: unit.address,
+        lat,
+        lng,
+        coordinates: { lat, lng },
+        capacity: unit.capacityPerDay ?? 0,
+        label: unit.name,
+      };
+    });
+
+    const schoolPoints = schoolRows.map((school) => {
+      const lat = parseCoordinate(school.lat);
+      const lng = parseCoordinate(school.lng);
+      const studentCount = createStudentCount(school);
+      return {
+        id: school.id,
+        type: 'school',
+        name: school.schoolName,
+        address: school.address,
+        lat,
+        lng,
+        coordinates: { lat, lng },
+        studentCount,
+        label: school.schoolName,
+        sppgId: school.sppgId ?? null,
+      };
+    });
+
+    const sppgById = new Map(sppgRows.map((item) => [item.id, item]));
+    const connections = schoolRows
+      .filter((school) => Boolean(school.sppgId))
+      .map((school) => {
+        const partnerSppg = school.sppgId ? sppgById.get(school.sppgId) ?? null : null;
+        const schoolLat = parseCoordinate(school.lat);
+        const schoolLng = parseCoordinate(school.lng);
+        const sppgLat = parseCoordinate(partnerSppg?.lat);
+        const sppgLng = parseCoordinate(partnerSppg?.lng);
+
+        return {
+          id: `${school.sppgId}-${school.id}`,
+          type: 'sppg-school',
+          sppgId: school.sppgId,
+          schoolId: school.id,
+          from: partnerSppg
+            ? {
+                id: partnerSppg.id,
+                name: partnerSppg.name,
+                lat: sppgLat,
+                lng: sppgLng,
+              }
+            : null,
+          to: {
+            id: school.id,
+            name: school.schoolName,
+            lat: schoolLat,
+            lng: schoolLng,
+          },
+          active: partnerSppg !== null && schoolLat !== null && schoolLng !== null && sppgLat !== null && sppgLng !== null,
+        };
+      });
+
+    return res.json({
+      success: true,
+      data: {
+        sppg: sppgPoints,
+        schools: schoolPoints,
+        connections,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
 export const getSekolahById = async (req: Request<IdParams>, res: Response) => {
   try {
     const { id } = req.params;
