@@ -158,44 +158,44 @@ const getSchoolOrResponse = async (id: string, res: Response) => {
 };
 
 // GET semua data sekolah
-export const getAllSekolah = async (_req: Request, res: Response): Promise<any> => {
+export const getAllSekolah = async (req: Request, res: Response): Promise<any> => {
   try {
-    const [schoolRows, sppgRows] = await Promise.all([
+    const [schoolRows, sppgRows, menuRows, reportRows] = await Promise.all([
       db.select().from(schools),
       db.select().from(sppg),
+      db.select().from(menus),
+      db.select().from(schoolReports),
     ]);
 
     const sppgById = new Map(sppgRows.map((item) => [item.id, item]));
+    const menusBySppgId = new Map<string, MenuRow[]>();
+    for (const menu of menuRows) {
+      menusBySppgId.set(menu.sppgId, [...(menusBySppgId.get(menu.sppgId) ?? []), menu]);
+    }
 
-    const data = schoolRows.map((school) => {
-      const partnerSppg = school.sppgId ? sppgById.get(school.sppgId) ?? null : null;
-      const partnerName = partnerSppg?.name ?? null;
+    const reportsBySchoolId = new Map<string, ReportRow[]>();
+    for (const report of reportRows) {
+      reportsBySchoolId.set(report.schoolId, [...(reportsBySchoolId.get(report.schoolId) ?? []), report]);
+    }
 
-      return {
-        ...school,
-        sppg: partnerSppg
-          ? {
-              id: partnerSppg.id,
-              name: partnerSppg.name,
-              address: partnerSppg.address,
-              capacityPerDay: partnerSppg.capacityPerDay,
-            }
-          : null,
-        sppgName: partnerName,
-        affiliatedKitchen: partnerName,
-        partnerInfo: partnerName ? `Ditangani oleh ${partnerName}` : "Belum terhubung",
-      };
-    });
-
-    return res.status(200).json({
-      success: true,
-      data,
+    const data = schoolRows.map((school) =>
+      enrichSchool(
+        school,
+        school.sppgId ? sppgById.get(school.sppgId) ?? null : null,
+        school.sppgId ? menusBySppgId.get(school.sppgId) ?? [] : [],
+        reportsBySchoolId.get(school.id) ?? [],
+      ),
+    );
+    
+    return res.status(200).json({ 
+      success: true, 
+      data 
     });
   } catch (error) {
     console.error("Error GET getAllSekolah:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error" 
     });
   }
 };
