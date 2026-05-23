@@ -11,13 +11,14 @@ import {
   getSekolahNutrisi,
   getSekolahSppg,
 } from '../controllers/schoolControllers';
+import { getAllSekolah as getAllSekolahPublic } from '../controllers/publicControllers';
 import { createLaporan, getLaporan, getLaporanById } from '../controllers/laporanController';
 import { verifyToken } from '../middlewares/authMiddleware';
 import { requireRole } from '../middlewares/roleMiddleware';
 
 const router = Router();
 
-router.get('/', getAllSekolah);
+router.get('/', getAllSekolahPublic);
 router.get('/dashboard/summary', verifyToken, requireRole('school', 'sekolah'), getSchoolDashboardSummary);
 router.post('/reports', verifyToken, requireRole('school', 'sekolah'), createLaporan);
 router.get('/reports', getLaporan);

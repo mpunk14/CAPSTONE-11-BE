@@ -283,8 +283,8 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       ? req.body.productionDate.trim()
       : new Date().toISOString().slice(0, 10);
     const targetSchoolIds = parseTargetSchoolIds(req.body.targetSchoolIds);
-    const file = req.file as Express.Multer.File & { secure_url?: string; path?: string; public_id?: string } | undefined;
-    const photoUrl = file?.secure_url ?? file?.path;
+    const file = req.file as Express.Multer.File & { secure_url?: string; path?: string; url?: string; filename?: string; public_id?: string } | undefined;
+    const photoUrl = file?.secure_url ?? file?.path ?? (file as any)?.url ?? (file as any)?.filename ?? null;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -294,13 +294,8 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       return res.status(400).json({ success: false, message: "Foto dokumentasi wajib diunggah" });
     }
 
-    if (!notes) {
-      return res.status(400).json({ success: false, message: "Notes wajib diisi" });
-    }
-
-    if (!targetSchoolIds.length) {
-      return res.status(400).json({ success: false, message: "targetSchoolIds wajib diisi" });
-    }
+    // notes and targetSchoolIds are optional from the frontend. If notes not provided, store empty string.
+    // If targetSchoolIds is empty, treat as a general documentation (no specific target school).
 
     const [sppgData] = await db.select().from(sppg).where(eq(sppg.userId, userId));
 
@@ -308,35 +303,53 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
     }
 
-    const validSchools = await db.select({ id: schools.id }).from(schools).where(inArray(schools.id, targetSchoolIds));
-    const validSchoolIds = new Set(validSchools.map((item) => item.id));
-    const invalidSchoolIds = targetSchoolIds.filter((id) => !validSchoolIds.has(id));
+    let data: any[] = [];
 
-    if (invalidSchoolIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Ada targetSchoolIds yang tidak valid",
-        invalidSchoolIds,
-      });
+    if (targetSchoolIds.length) {
+      const validSchools = await db.select({ id: schools.id }).from(schools).where(inArray(schools.id, targetSchoolIds));
+      const validSchoolIds = new Set(validSchools.map((item) => item.id));
+      const invalidSchoolIds = targetSchoolIds.filter((id) => !validSchoolIds.has(id));
+
+      if (invalidSchoolIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Ada targetSchoolIds yang tidak valid",
+          invalidSchoolIds,
+        });
+      }
+
+      const inserted = await Promise.all(
+        targetSchoolIds.map((targetSchoolId) =>
+          db
+            .insert(mealDocumentation)
+            .values({
+              sppgId: sppgData.id,
+              targetSchoolId,
+              productionDate,
+              photoUrl,
+              notes,
+              uploadedByRole: "sppg",
+            })
+            .returning(),
+        ),
+      );
+
+      data = inserted.flat();
+    } else {
+      const inserted = await db
+        .insert(mealDocumentation)
+        .values({
+          sppgId: sppgData.id,
+          targetSchoolId: null,
+          productionDate,
+          photoUrl,
+          notes,
+          uploadedByRole: "sppg",
+        })
+        .returning();
+
+      data = inserted;
     }
-
-    const inserted = await Promise.all(
-      targetSchoolIds.map((targetSchoolId) =>
-        db
-          .insert(mealDocumentation)
-          .values({
-            sppgId: sppgData.id,
-            targetSchoolId,
-            productionDate,
-            photoUrl,
-            notes,
-            uploadedByRole: "sppg",
-          })
-          .returning(),
-      ),
-    );
-
-    const data = inserted.flat();
 
     return res.status(201).json({
       success: true,
@@ -344,6 +357,7 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       data,
     });
   } catch (error) {
+    console.error("Error POST createMealDocumentation:", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
