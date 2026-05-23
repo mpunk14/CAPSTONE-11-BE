@@ -41,6 +41,80 @@ const getLatestMenu = (menuRows: MenuRow[]) => {
   return [...menuRows].sort((a, b) => String(b.menuDate).localeCompare(String(a.menuDate)))[0] ?? null;
 };
 
+const getTodayIsoDateWib = () => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  const day = parts.find((part) => part.type === "day")?.value ?? "00";
+
+  return `${year}-${month}-${day}`;
+};
+
+const toIsoDate = (value: string | Date | null | undefined): string | null => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const direct = trimmed.match(/^\d{4}-\d{2}-\d{2}$/);
+    if (direct) return trimmed;
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
+
+  return null;
+};
+
+const getTodayMenu = (menuRows: MenuRow[]) => {
+  const todayIso = getTodayIsoDateWib();
+  const todayMenus = menuRows.filter((menu) => toIsoDate(menu.menuDate) === todayIso);
+  if (!todayMenus.length) return null;
+
+  // Prioritaskan menu yang benar-benar berisi nama hidangan.
+  const withContent = todayMenus.filter(
+    (menu) =>
+      Boolean(menu.rice && String(menu.rice).trim()) ||
+      Boolean(menu.sideDish && String(menu.sideDish).trim()) ||
+      Boolean(menu.fruit && String(menu.fruit).trim()),
+  );
+
+  const pickFrom = withContent.length ? withContent : todayMenus;
+  return [...pickFrom].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] ?? null;
+};
+
+const getBestMenuForDisplay = (menuRows: MenuRow[]) => {
+  const todayMenu = getTodayMenu(menuRows);
+  const hasContent =
+    todayMenu &&
+    (Boolean(todayMenu.rice && String(todayMenu.rice).trim()) ||
+      Boolean(todayMenu.sideDish && String(todayMenu.sideDish).trim()) ||
+      Boolean(todayMenu.fruit && String(todayMenu.fruit).trim()));
+
+  if (hasContent) return todayMenu;
+
+  // Fallback: ambil menu terbaru yang punya isi agar tidak menampilkan "-" semua.
+  const validMenus = menuRows.filter(
+    (menu) =>
+      Boolean(menu.rice && String(menu.rice).trim()) ||
+      Boolean(menu.sideDish && String(menu.sideDish).trim()) ||
+      Boolean(menu.fruit && String(menu.fruit).trim()),
+  );
+
+  return [...validMenus].sort((a, b) => String(b.menuDate).localeCompare(String(a.menuDate)))[0] ?? null;
+};
+
 const mapMenuToDailyItem = (menu: MenuRow, index: number) => ({
   hari: formatDateLabel(menu.menuDate),
   isToday: index === 0,
@@ -101,7 +175,7 @@ const enrichSchool = (
   menuRows: MenuRow[] = [],
   reports: ReportRow[] = [],
 ) => {
-  const latestMenu = getLatestMenu(menuRows);
+  const todayMenu = getBestMenuForDisplay(menuRows);
   const studentCount = createStudentCount(school);
   const sppgName = partnerSppg?.name ?? null;
 
@@ -121,18 +195,19 @@ const enrichSchool = (
     partnerSppgName: sppgName,
     affiliatedKitchen: sppgName,
     sppg: normalizeSppgForSchool(partnerSppg),
-    menuLabel: latestMenu ? "Menu Terbaru" : "Menu Hari Ini",
-    menuTitle: latestMenu?.rice ?? "Belum ada menu hari ini",
-    todayMenuTitle: latestMenu?.rice ?? "Belum ada menu hari ini",
-    menuDetail: latestMenu
-      ? [latestMenu.sideDish, latestMenu.fruit].filter(Boolean).join(", ")
+    menuLabel: "Menu Hari Ini",
+    menuTitle: todayMenu?.rice ?? "Belum ada menu hari ini",
+    todayMenuTitle: todayMenu?.rice ?? "Belum ada menu hari ini",
+    menuDetail: todayMenu
+      ? [todayMenu.sideDish, todayMenu.fruit].filter(Boolean).join(", ")
       : "Data menu belum tersedia",
-    todayMenuDetail: latestMenu
-      ? [latestMenu.sideDish, latestMenu.fruit].filter(Boolean).join(", ")
+    todayMenuDetail: todayMenu
+      ? [todayMenu.sideDish, todayMenu.fruit].filter(Boolean).join(", ")
       : "Data menu belum tersedia",
-    calories: latestMenu?.calories ? `${latestMenu.calories} kcal` : "-",
-    nutrition: latestMenu?.protein ? `Protein ${latestMenu.protein}g` : "Target Nutrisi: -",
-    menuImageUrl: null,
+    calories: todayMenu?.calories ? `${todayMenu.calories} kcal` : "-",
+    nutrition: todayMenu?.protein ? `Protein ${todayMenu.protein}g` : "Target Nutrisi: -",
+    menuImage: todayMenu?.menuImageUrl ?? null,
+    menuImageUrl: todayMenu?.menuImageUrl ?? null,
     rating: averageRating(reports),
   };
 };
@@ -291,7 +366,7 @@ export const getSekolahNutrisi = async (req: Request, res: Response): Promise<an
     if (!school.sppgId) return res.status(200).json({ success: true, data: mapNutrition(null) });
 
     const menuRows = await db.select().from(menus).where(eq(menus.sppgId, school.sppgId));
-    return res.status(200).json({ success: true, data: mapNutrition(getLatestMenu(menuRows)) });
+    return res.status(200).json({ success: true, data: mapNutrition(getBestMenuForDisplay(menuRows)) });
   } catch (error) {
     console.error("Error GET getSekolahNutrisi:", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../db"; 
 import { and, eq, inArray } from "drizzle-orm";
-import { menus, schoolReports, schools, sppg } from "../db/skema";
+import { mealDocumentation, menus, schoolReports, schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 import { cloudinary } from "../config/cloudinary";
 
@@ -296,7 +296,6 @@ const resolveCloudinaryImageUrl = (
 export const createMealDocumentation = async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user?.id;
-    const notes = typeof req.body.notes === "string" ? req.body.notes.trim() : "";
     const productionDate = typeof req.body.productionDate === "string" && req.body.productionDate.trim()
       ? req.body.productionDate.trim()
       : new Date().toISOString().slice(0, 10);
@@ -322,37 +321,27 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       .from(menus)
       .where(and(eq(menus.sppgId, sppgData.id), eq(menus.menuDate, productionDate)));
 
-    if (existingMenus.length > 0) {
-      const currentMenu = existingMenus[0];
-      const [updatedMenu] = await db
-        .update(menus)
-        .set({
-          menuImageUrl: photoUrl,
-          updatedAt: new Date(),
-        })
-        .where(eq(menus.id, currentMenu.id))
-        .returning();
-
-      return res.status(200).json({
-        success: true,
-        message: "Dokumentasi menu harian berhasil diperbarui",
-        data: [updatedMenu],
+    if (existingMenus.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Menu untuk tanggal ini belum ada. Unggah menu harian/mingguan terlebih dahulu.",
       });
     }
 
-    const [insertedMenu] = await db
-      .insert(menus)
-      .values({
-        sppgId: sppgData.id,
-        menuDate: productionDate,
+    const currentMenu = existingMenus[0];
+    const [updatedMenu] = await db
+      .update(menus)
+      .set({
         menuImageUrl: photoUrl,
+        updatedAt: new Date(),
       })
+      .where(eq(menus.id, currentMenu.id))
       .returning();
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "Dokumentasi menu harian berhasil disimpan",
-      data: [insertedMenu],
+      message: "Dokumentasi menu harian berhasil diperbarui",
+      data: [updatedMenu],
     });
   } catch (error) {
     console.error("Error POST createMealDocumentation:", error);
@@ -372,13 +361,18 @@ export const getMealDocumentationHistory = async (req: Request, res: Response): 
       return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
     }
 
-    const menuRows = await db.select().from(menus).where(eq(menus.sppgId, sppgData.id));
-    const data = [...menuRows]
+    const [menuRows, docRows, schoolRows] = await Promise.all([
+      db.select().from(menus).where(eq(menus.sppgId, sppgData.id)),
+      db.select().from(mealDocumentation).where(eq(mealDocumentation.sppgId, sppgData.id)),
+      db.select().from(schools),
+    ]);
+
+    const schoolById = new Map(schoolRows.map((row) => [row.id, row]));
+
+    const menuDocs = [...menuRows]
       .filter((row) => typeof row.menuImageUrl === "string" && row.menuImageUrl.trim().length > 0)
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, 20)
       .map((row) => ({
-        id: row.id,
+        id: `menu-${row.id}`,
         photoUrl: row.menuImageUrl,
         notes: row.rice ?? "Dokumentasi menu",
         productionDate: row.menuDate,
@@ -386,6 +380,23 @@ export const getMealDocumentationHistory = async (req: Request, res: Response): 
         schoolId: null,
         schoolName: "Menu Harian",
       }));
+
+    const schoolDocs = docRows.map((row) => {
+      const targetSchool = row.targetSchoolId ? schoolById.get(row.targetSchoolId) ?? null : null;
+      return {
+        id: `school-doc-${row.id}`,
+        photoUrl: row.photoUrl,
+        notes: row.notes ?? "Dokumentasi menu",
+        productionDate: row.productionDate,
+        createdAt: row.createdAt,
+        schoolId: row.targetSchoolId,
+        schoolName: targetSchool?.schoolName ?? "Sekolah",
+      };
+    });
+
+    const data = [...menuDocs, ...schoolDocs]
+      .sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime())
+      .slice(0, 20);
 
     return res.status(200).json({ success: true, data });
   } catch (error) {
