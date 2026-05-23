@@ -5,6 +5,14 @@ import { eq } from 'drizzle-orm';
 import { isUuid } from '../utils/uuid';
 
 type IdParams = { id: string; sppgId?: string };
+type SppgRow = typeof sppg.$inferSelect;
+type SchoolRow = typeof schools.$inferSelect;
+
+const parseCoordinate = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const getQueryString = (value: unknown): string | undefined => {
   if (typeof value === 'string') return value;
@@ -16,72 +24,39 @@ const invalidUuidResponse = (res: Response, label: string) => {
   return res.status(400).json({ success: false, message: `Format ${label} tidak valid` });
 };
 
-const createStudentCount = (school: typeof schools.$inferSelect) => {
+const createStudentCount = (school: SchoolRow) => {
   if (typeof school.studentCount === 'number') return school.studentCount;
   const seed = Number(school.npsn.slice(-2));
   return Number.isFinite(seed) ? 300 + seed * 4 : 360;
 };
 
-const getTodayIsoDateWib = () => {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Jakarta",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+const normalizeSppgForPublicMap = (partnerSppg: SppgRow | null) => {
+  if (!partnerSppg) return null;
 
-  const parts = formatter.formatToParts(new Date());
-  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
-  const month = parts.find((part) => part.type === "month")?.value ?? "00";
-  const day = parts.find((part) => part.type === "day")?.value ?? "00";
+  const lat = parseCoordinate(partnerSppg.lat);
+  const lng = parseCoordinate(partnerSppg.lng);
 
-  return `${year}-${month}-${day}`;
+  return {
+    ...partnerSppg,
+    sppgId: partnerSppg.id,
+    sppgName: partnerSppg.name,
+    nama: partnerSppg.name,
+    alamat: partnerSppg.address,
+    kapasitas: partnerSppg.capacityPerDay ?? 0,
+    location: partnerSppg.address,
+    latitude: lat,
+    longitude: lng,
+    coordinates: { lat, lng },
+  };
 };
 
-const toIsoDate = (value: string | Date | null | undefined): string | null => {
-  if (!value) return null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toISOString().slice(0, 10);
-  }
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return null;
-    return value.toISOString().slice(0, 10);
-  }
-  return null;
-};
-
-const hasMenuContent = (menu?: typeof menus.$inferSelect | null) =>
-  Boolean(menu?.rice && String(menu.rice).trim()) ||
-  Boolean(menu?.sideDish && String(menu.sideDish).trim()) ||
-  Boolean(menu?.fruit && String(menu.fruit).trim());
-
-const getBestMenuForToday = (menuRows: Array<typeof menus.$inferSelect>) => {
-  const todayIso = getTodayIsoDateWib();
-  const todayMenus = menuRows.filter((menu) => toIsoDate(menu.menuDate) === todayIso);
-  const todayValid = todayMenus.filter((menu) => hasMenuContent(menu));
-  if (todayValid.length) {
-    return [...todayValid].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-  }
-
-  if (todayMenus.length) {
-    return [...todayMenus].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-  }
-
-  const validMenus = menuRows.filter((menu) => hasMenuContent(menu));
-  if (!validMenus.length) return null;
-  return [...validMenus].sort((a, b) => String(b.menuDate).localeCompare(String(a.menuDate)))[0];
-};
-
-const enrichSchoolForPublicMap = (
-  school: typeof schools.$inferSelect,
-  menuRows: Array<typeof menus.$inferSelect> = [],
-) => {
+const enrichSchoolForPublicMap = (school: SchoolRow, partnerSppg: SppgRow | null = null) => {
   const studentCount = createStudentCount(school);
-  const todayMenu = getBestMenuForToday(menuRows);
+  const schoolLat = parseCoordinate(school.lat);
+  const schoolLng = parseCoordinate(school.lng);
+  const sppgLat = parseCoordinate(partnerSppg?.lat);
+  const sppgLng = parseCoordinate(partnerSppg?.lng);
+  const partnerSppgName = partnerSppg?.name ?? null;
 
   return {
     ...school,
@@ -92,21 +67,50 @@ const enrichSchoolForPublicMap = (
     studentsCount: studentCount,
     jumlahSiswa: studentCount,
     capacity: studentCount,
-    menuLabel: "Menu Hari Ini",
-    menuTitle: todayMenu?.rice ?? "Belum ada menu hari ini",
-    todayMenuTitle: todayMenu?.rice ?? "Belum ada menu hari ini",
-    menuDetail: todayMenu ? [todayMenu.sideDish, todayMenu.fruit].filter(Boolean).join(", ") : "Data menu belum tersedia",
-    todayMenuDetail: todayMenu ? [todayMenu.sideDish, todayMenu.fruit].filter(Boolean).join(", ") : "Data menu belum tersedia",
-    calories: todayMenu?.calories ? `${todayMenu.calories} kcal` : "-",
-    nutrition: todayMenu?.protein ? `Protein ${todayMenu.protein}g` : "Target Nutrisi: -",
-    menuImageUrl: todayMenu?.menuImageUrl ?? null,
-    menuImage: todayMenu?.menuImageUrl ?? null,
+    sppgName: partnerSppgName,
+    partnerSppgName,
+    affiliatedKitchen: partnerSppgName,
+    sppg: normalizeSppgForPublicMap(partnerSppg),
+    location: school.address,
+    latitude: schoolLat,
+    longitude: schoolLng,
+    coordinates: { lat: schoolLat, lng: schoolLng },
+    mapOverlay: {
+      school: {
+        id: school.id,
+        name: school.schoolName,
+        address: school.address,
+        lat: schoolLat,
+        lng: schoolLng,
+        studentCount,
+      },
+      sppg: partnerSppg
+        ? {
+            id: partnerSppg.id,
+            name: partnerSppg.name,
+            address: partnerSppg.address,
+            lat: sppgLat,
+            lng: sppgLng,
+          }
+        : null,
+      connection:
+        partnerSppg && schoolLat !== null && schoolLng !== null && sppgLat !== null && sppgLng !== null
+          ? {
+              from: { lat: sppgLat, lng: sppgLng },
+              to: { lat: schoolLat, lng: schoolLng },
+              type: 'sppg-school',
+            }
+          : null,
+    },
   };
 };
 
 const enrichSppgForPublicMap = async (unit: typeof sppg.$inferSelect) => {
   const relatedSchools = await db.select().from(schools).where(eq(schools.sppgId, unit.id));
+  const overlaySchools = relatedSchools.map((school) => enrichSchoolForPublicMap(school, unit));
   const schoolCount = relatedSchools.length;
+  const unitLat = parseCoordinate(unit.lat);
+  const unitLng = parseCoordinate(unit.lng);
 
   return {
     ...unit,
@@ -115,7 +119,10 @@ const enrichSppgForPublicMap = async (unit: typeof sppg.$inferSelect) => {
     location: unit.address,
     kapasitas: unit.capacityPerDay ?? 0,
     capacity: unit.capacityPerDay ?? 0,
-    schools: relatedSchools,
+    latitude: unitLat,
+    longitude: unitLng,
+    coordinates: { lat: unitLat, lng: unitLng },
+    schools: overlaySchools,
     schoolIds: relatedSchools.map((school) => school.id),
     sekolahIds: relatedSchools.map((school) => school.id),
     school_ids: relatedSchools.map((school) => school.id),
@@ -123,6 +130,28 @@ const enrichSppgForPublicMap = async (unit: typeof sppg.$inferSelect) => {
     totalPartnerSchools: schoolCount,
     partnerSchools: schoolCount,
     schoolCount,
+    mapOverlay: {
+      sppg: {
+        id: unit.id,
+        name: unit.name,
+        address: unit.address,
+        lat: unitLat,
+        lng: unitLng,
+      },
+      schools: overlaySchools.map((school) => ({
+        id: school.id,
+        name: school.nama,
+        address: school.alamat,
+        lat: school.latitude,
+        lng: school.longitude,
+      })),
+      connections: overlaySchools.map((school) => ({
+        from: { lat: unitLat, lng: unitLng },
+        to: { lat: school.latitude, lng: school.longitude },
+        schoolId: school.id,
+        type: 'sppg-school',
+      })),
+    },
   };
 };
 
@@ -153,21 +182,14 @@ export const getSppgById = async (req: Request<IdParams>, res: Response) => {
 
 export const getAllSekolah = async (_req: Request, res: Response) => {
   try {
-    const [rows, menuRows] = await Promise.all([
+    const [schoolRows, sppgRows] = await Promise.all([
       db.select().from(schools),
-      db.select().from(menus),
+      db.select().from(sppg),
     ]);
 
-    const menusBySppgId = new Map<string, Array<typeof menus.$inferSelect>>();
-    for (const menu of menuRows) {
-      menusBySppgId.set(menu.sppgId, [...(menusBySppgId.get(menu.sppgId) ?? []), menu]);
-    }
-
-    const data = rows.map((school) =>
-      enrichSchoolForPublicMap(
-        school,
-        school.sppgId ? menusBySppgId.get(school.sppgId) ?? [] : [],
-      ),
+    const sppgById = new Map(sppgRows.map((item) => [item.id, item]));
+    const data = schoolRows.map((school) =>
+      enrichSchoolForPublicMap(school, school.sppgId ? sppgById.get(school.sppgId) ?? null : null),
     );
     return res.json({ success: true, data });
   } catch (error) {
@@ -188,10 +210,8 @@ export const getSekolahById = async (req: Request<IdParams>, res: Response) => {
       const [s] = await db.select().from(sppg).where(eq(sppg.id, school.sppgId));
       sppgData = s;
     }
-    const menuRows = school.sppgId
-      ? await db.select().from(menus).where(eq(menus.sppgId, school.sppgId))
-      : [];
-    return res.json({ success: true, data: { ...enrichSchoolForPublicMap(school, menuRows), sppg: sppgData } });
+
+    return res.json({ success: true, data: enrichSchoolForPublicMap(school, sppgData) });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
