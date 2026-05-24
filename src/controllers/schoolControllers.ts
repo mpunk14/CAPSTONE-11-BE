@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index"; 
-import { eq } from "drizzle-orm";
 import { mealDocumentation, menus, notifications, schoolReports, schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 
@@ -136,6 +136,7 @@ const mapDocumentation = (docs: DocumentationRow[]) =>
     fotoUrl: doc.photoUrl,
     caption: doc.notes ?? "Dokumentasi menu",
     productionDate: doc.productionDate,
+    createdAt: doc.createdAt,
   }));
 
 const mapNotificationsToNotes = (items: NotificationRow[]) =>
@@ -362,7 +363,17 @@ export const getSekolahDokumentasi = async (req: Request, res: Response): Promis
     const school = await getSchoolOrResponse(req.params.id as string, res);
     if (!school) return;
 
-    const docs = await db.select().from(mealDocumentation).where(eq(mealDocumentation.targetSchoolId, school.id));
+    const docs = await db
+      .select()
+      .from(mealDocumentation)
+      .where(
+        and(
+          eq(mealDocumentation.targetSchoolId, school.id),
+          eq(mealDocumentation.uploadedByRole, "school")
+        )
+      )
+      .orderBy(desc(mealDocumentation.createdAt));
+
     return res.status(200).json({ success: true, data: mapDocumentation(docs) });
   } catch (error) {
     console.error("Error GET getSekolahDokumentasi:", error);
