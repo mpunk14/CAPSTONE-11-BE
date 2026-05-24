@@ -291,3 +291,31 @@ export const getNotifikasi = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
+export const updateNotifikasiStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!isUuid(id)) return invalidUuidResponse(res, 'ID Notifikasi');
+
+    const nextStatus = typeof req.body?.status === 'string' ? req.body.status : '';
+    const allowedStatuses = ['new', 'received', 'reviewed'];
+
+    if (!allowedStatuses.includes(nextStatus)) {
+      return res.status(400).json({ success: false, message: 'Status tidak valid' });
+    }
+
+    const [updatedNotification] = await db
+      .update(notifications)
+      .set({ status: nextStatus })
+      .where(eq(notifications.id, id))
+      .returning();
+
+    if (!updatedNotification) {
+      return res.status(404).json({ success: false, message: 'Notifikasi tidak ditemukan' });
+    }
+
+    return res.json({ success: true, data: updatedNotification });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
