@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index"; 
-import { desc, eq } from "drizzle-orm";
 import { mealDocumentation, menus, notifications, schoolReports, schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 
@@ -366,7 +366,12 @@ export const getSekolahDokumentasi = async (req: Request, res: Response): Promis
     const docs = await db
       .select()
       .from(mealDocumentation)
-      .where(eq(mealDocumentation.targetSchoolId, school.id))
+      .where(
+        and(
+          eq(mealDocumentation.targetSchoolId, school.id),
+          eq(mealDocumentation.uploadedByRole, "school")
+        )
+      )
       .orderBy(desc(mealDocumentation.createdAt));
 
     return res.status(200).json({ success: true, data: mapDocumentation(docs) });
