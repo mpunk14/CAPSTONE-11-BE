@@ -20,6 +20,19 @@ const formatDateLabel = (dateValue: string | Date) => {
   });
 };
 
+const getLocalDateKey = (value: string | Date | null | undefined) => {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
 const averageRating = (reports: ReportRow[], fallback = 4.8) => {
   const ratings = reports
     .map((report) => report.rating)
@@ -301,6 +314,9 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       : new Date().toISOString().slice(0, 10);
     const file = req.file as Express.Multer.File & { secure_url?: string; path?: string; url?: string; filename?: string; public_id?: string } | undefined;
     const photoUrl = resolveCloudinaryImageUrl(file);
+    const notes = String(req.body.notes ?? req.body.caption ?? "Dokumentasi menu").trim() || "Dokumentasi menu";
+    const targetSchoolIds = parseTargetSchoolIds(req.body.targetSchoolIds);
+    const targetSchoolId = targetSchoolIds[0] ?? null;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -316,32 +332,37 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
       return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
     }
 
+    const [inserted] = await db
+      .insert(mealDocumentation)
+      .values({
+        sppgId: sppgData.id,
+        targetSchoolId,
+        productionDate,
+        photoUrl,
+        notes,
+        uploadedByRole: "sppg",
+      })
+      .returning();
+
     const existingMenus = await db
       .select()
       .from(menus)
       .where(and(eq(menus.sppgId, sppgData.id), eq(menus.menuDate, productionDate)));
 
-    if (existingMenus.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Menu untuk tanggal ini belum ada. Unggah menu harian/mingguan terlebih dahulu.",
-      });
+    if (existingMenus.length > 0) {
+      await db
+        .update(menus)
+        .set({
+          menuImageUrl: photoUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(menus.id, existingMenus[0].id));
     }
 
-    const currentMenu = existingMenus[0];
-    const [updatedMenu] = await db
-      .update(menus)
-      .set({
-        menuImageUrl: photoUrl,
-        updatedAt: new Date(),
-      })
-      .where(eq(menus.id, currentMenu.id))
-      .returning();
-
-    return res.status(200).json({
+    return res.status(201).json({
       success: true,
-      message: "Dokumentasi menu harian berhasil diperbarui",
-      data: [updatedMenu],
+      message: "Dokumentasi menu berhasil disimpan",
+      data: [inserted],
     });
   } catch (error) {
     console.error("Error POST createMealDocumentation:", error);
@@ -361,40 +382,32 @@ export const getMealDocumentationHistory = async (req: Request, res: Response): 
       return res.status(404).json({ success: false, message: "Data SPPG milik user ini tidak ditemukan" });
     }
 
-    const [menuRows, docRows, schoolRows] = await Promise.all([
-      db.select().from(menus).where(eq(menus.sppgId, sppgData.id)),
-      db.select().from(mealDocumentation).where(eq(mealDocumentation.sppgId, sppgData.id)),
+    const todayKey = getLocalDateKey(new Date()) ?? new Date().toISOString().slice(0, 10);
+
+    const [docRows, schoolRows] = await Promise.all([
+      db
+        .select()
+        .from(mealDocumentation)
+        .where(and(eq(mealDocumentation.sppgId, sppgData.id), eq(mealDocumentation.uploadedByRole, "sppg"))),
       db.select().from(schools),
     ]);
 
     const schoolById = new Map(schoolRows.map((row) => [row.id, row]));
 
-    const menuDocs = [...menuRows]
-      .filter((row) => typeof row.menuImageUrl === "string" && row.menuImageUrl.trim().length > 0)
-      .map((row) => ({
-        id: `menu-${row.id}`,
-        photoUrl: row.menuImageUrl,
-        notes: row.rice ?? "Dokumentasi menu",
-        productionDate: row.menuDate,
-        createdAt: row.updatedAt,
-        schoolId: null,
-        schoolName: "Menu Harian",
-      }));
-
-    const schoolDocs = docRows.map((row) => {
-      const targetSchool = row.targetSchoolId ? schoolById.get(row.targetSchoolId) ?? null : null;
-      return {
-        id: `school-doc-${row.id}`,
-        photoUrl: row.photoUrl,
-        notes: row.notes ?? "Dokumentasi menu",
-        productionDate: row.productionDate,
-        createdAt: row.createdAt,
-        schoolId: row.targetSchoolId,
-        schoolName: targetSchool?.schoolName ?? "Sekolah",
-      };
-    });
-
-    const data = [...menuDocs, ...schoolDocs]
+    const data = docRows
+      .filter((row) => getLocalDateKey(row.productionDate) === todayKey)
+      .map((row) => {
+        const targetSchool = row.targetSchoolId ? schoolById.get(row.targetSchoolId) ?? null : null;
+        return {
+          id: `school-doc-${row.id}`,
+          photoUrl: row.photoUrl,
+          notes: row.notes ?? "Dokumentasi menu",
+          productionDate: row.productionDate,
+          createdAt: row.createdAt,
+          schoolId: row.targetSchoolId,
+          schoolName: targetSchool?.schoolName ?? "Sekolah",
+        };
+      })
       .sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime())
       .slice(0, 20);
 
