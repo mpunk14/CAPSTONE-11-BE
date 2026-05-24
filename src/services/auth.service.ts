@@ -11,7 +11,43 @@ const normalizeRole = (role?: string) => {
 };
 
 export const loginService = async (identifier: string, password: string, role?: string) => {
-  const [user] = await db.select().from(users).where(eq(users.email, identifier));
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  let user: typeof users.$inferSelect | undefined;
+
+  const [emailMatchedUser] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizedIdentifier));
+  user = emailMatchedUser;
+
+  // Fallback login via kode profil saat identifier bukan email.
+  if (!user) {
+    const requestedRole = normalizeRole(role);
+
+    if (requestedRole === "sppg") {
+      const [matchedSppg] = await db
+        .select({ userId: sppg.userId })
+        .from(sppg)
+        .where(eq(sppg.sppgCode, identifier.trim()));
+
+      if (matchedSppg?.userId) {
+        const [matchedUser] = await db.select().from(users).where(eq(users.id, matchedSppg.userId));
+        user = matchedUser;
+      }
+    }
+
+    if (!user && requestedRole === "school") {
+      const [matchedSchool] = await db
+        .select({ userId: schools.userId })
+        .from(schools)
+        .where(eq(schools.npsn, identifier.trim()));
+
+      if (matchedSchool?.userId) {
+        const [matchedUser] = await db.select().from(users).where(eq(users.id, matchedSchool.userId));
+        user = matchedUser;
+      }
+    }
+  }
 
   if (!user) {
     return { status: 404, data: { success: false, message: "User tidak ditemukan" } };
