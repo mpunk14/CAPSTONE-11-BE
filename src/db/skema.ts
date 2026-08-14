@@ -17,6 +17,7 @@ export const sppgStatusEnum = pgEnum('sppg_status', ['active', 'inactive', 'main
 export const reportStatusEnum = pgEnum('report_status', ['submitted', 'received', 'reviewed']);
 export const notificationTypeEnum = pgEnum('notification_type', ['notification', 'feedback', 'complaint']);
 export const notificationStatusEnum = pgEnum('notification_status', ['new', 'received', 'reviewed']);
+export const cvAnalysisStatusEnum = pgEnum('cv_analysis_status', ['pending', 'processing', 'completed', 'failed']);
 
 // --- TABLES ---
 
@@ -117,6 +118,30 @@ export const mealDocumentation = pgTable('meal_documentation', {
   photoUrl: text('photo_url').notNull(),
   notes: text('notes'),
   uploadedByRole: roleEnum('uploaded_by_role').notNull(), // Membedakan apakah diupload oleh SPPG atau Sekolah
+  analysisStatus: cvAnalysisStatusEnum('analysis_status').default('pending').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 6b. CV Analysis Results (Hasil analisis computer vision per dokumentasi)
+export const cvAnalysisResults = pgTable('cv_analysis_results', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentationId: uuid('documentation_id')
+    .references(() => mealDocumentation.id)
+    .notNull(),
+  status: cvAnalysisStatusEnum('status').default('pending').notNull(),
+  // JSON string: [{name: string, confidence: number, portionGrams: number}]
+  detectedFoods: text('detected_foods'),
+  estimatedCalories: decimal('estimated_calories', { precision: 7, scale: 2 }),
+  estimatedProtein: decimal('estimated_protein', { precision: 5, scale: 2 }),
+  estimatedFat: decimal('estimated_fat', { precision: 5, scale: 2 }),
+  estimatedCarbs: decimal('estimated_carbs', { precision: 5, scale: 2 }),
+  // 0–100 cross-check score vs. SPPG-reported menu
+  matchScore: decimal('match_score', { precision: 5, scale: 2 }),
+  isFlagged: boolean('is_flagged').default(false).notNull(),
+  flagReason: text('flag_reason'),
+  processingTimeMs: integer('processing_time_ms'),
+  errorMessage: text('error_message'),
+  analyzedAt: timestamp('analyzed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

@@ -18,11 +18,12 @@ if (!connectionString) {
 }
 
 const client = connectionString
-  ? postgres(connectionString, {
-      max: 3,
-      // Supabase pooler can hang on prepared statements; disable them.
+  ? postgres(connectionString + (connectionString.includes('?') ? '&' : '?') + 'sslmode=require&pgbouncer=true', {
+      max: 1,
       prepare: false,
+      ssl: 'require',
+      idle_timeout: 10,
     })
-  : postgres({ max: 3 });
+  : postgres({ max: 1 });
 
 export const db = drizzle(client, { schema });

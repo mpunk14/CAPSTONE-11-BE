@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../db/index';
-import { sppg, schools, menus, articles, notifications } from '../db/skema';
-import { eq } from 'drizzle-orm';
+import { sppg, schools, menus, articles, notifications, mealDocumentation, cvAnalysisResults } from '../db/skema';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import { isUuid } from '../utils/uuid';
 
 type IdParams = { id: string; sppgId?: string };
@@ -315,6 +315,229 @@ export const updateNotifikasiStatus = async (req: Request, res: Response) => {
     }
 
     return res.json({ success: true, data: updatedNotification });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────
+// NEW: Public Dashboard — FR-08
+// GET /api/public/dashboard
+// Returns today's menu + nutrition summary per SPPG for the
+// public transparency dashboard.
+// ──────────────────────────────────────────────────────────────
+export const getDashboard = async (_req: Request, res: Response) => {
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const [sppgRows, todayMenus, schoolRows] = await Promise.all([
+      db.select().from(sppg),
+      db.select().from(menus).where(eq(menus.menuDate, todayStr)),
+      db.select().from(schools),
+    ]);
+
+    // Build lookup maps
+    const menuBySppgId = new Map(todayMenus.map((m) => [m.sppgId, m]));
+    const schoolCountBySppgId = new Map<string, number>();
+    for (const school of schoolRows) {
+      if (!school.sppgId) continue;
+      schoolCountBySppgId.set(school.sppgId, (schoolCountBySppgId.get(school.sppgId) ?? 0) + 1);
+    }
+
+    const data = sppgRows.map((unit) => {
+      const menu = menuBySppgId.get(unit.id) ?? null;
+      return {
+        sppgId: unit.id,
+        sppgName: unit.name,
+        address: unit.address,
+        status: unit.status,
+        partnerSchools: schoolCountBySppgId.get(unit.id) ?? 0,
+        todayMenu: menu
+          ? {
+              menuDate: menu.menuDate,
+              rice: menu.rice,
+              sideDish: menu.sideDish,
+              fruit: menu.fruit,
+              nutrition: {
+                calories: menu.calories ? Number(menu.calories) : null,
+                protein: menu.protein ? Number(menu.protein) : null,
+                carbohydrate: menu.carbohydrate ? Number(menu.carbohydrate) : null,
+                fat: menu.fat ? Number(menu.fat) : null,
+                fiber: menu.fiber ? Number(menu.fiber) : null,
+              },
+            }
+          : null,
+        hasMenuToday: menu !== null,
+      };
+    });
+
+    return res.json({ success: true, data, date: todayStr });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────
+// NEW: Public Peta SPPG with verification score — FR-11
+// GET /api/public/peta
+// Returns SPPG list with lat/lng + CV verification score
+// so Leaflet.js can color-code markers by verification status.
+// ──────────────────────────────────────────────────────────────
+export const getPetaSppg = async (_req: Request, res: Response) => {
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const tomorrowStr = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+    const [sppgRows, docRows] = await Promise.all([
+      db.select().from(sppg),
+      // Get today's documentation records
+      db
+        .select()
+        .from(mealDocumentation)
+        .where(
+          and(
+            gte(mealDocumentation.productionDate, todayStr),
+            lte(mealDocumentation.productionDate, tomorrowStr),
+          ),
+        ),
+    ]);
+
+    // Get CV analysis results for today's docs
+    const docIds = docRows.map((d) => d.id);
+    const analysisRows = docIds.length
+      ? await db
+          .select()
+          .from(cvAnalysisResults)
+          .where(eq(cvAnalysisResults.status, 'completed'))
+      : [];
+
+    // Map docId -> analysisResult
+    const analysisById = new Map(analysisRows.map((a) => [a.documentationId, a]));
+
+    // Map sppgId -> today's docs
+    const docsBySppgId = new Map<string, typeof docRows>();
+    for (const doc of docRows) {
+      const existing = docsBySppgId.get(doc.sppgId) ?? [];
+      existing.push(doc);
+      docsBySppgId.set(doc.sppgId, existing);
+    }
+
+    const parseCoord = (v: string | number | null | undefined) => {
+      if (v === null || v === undefined) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const data = sppgRows.map((unit) => {
+      const sppgDocs = docsBySppgId.get(unit.id) ?? [];
+
+      // Calculate average match score from completed CV analyses
+      const scores = sppgDocs
+        .map((doc) => analysisById.get(doc.id))
+        .filter((a): a is NonNullable<typeof a> => a != null && !a.isFlagged)
+        .map((a) => (a.matchScore ? Number(a.matchScore) : null))
+        .filter((s): s is number => s !== null);
+
+      const verificationScore =
+        scores.length > 0
+          ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+          : null;
+
+      const flaggedCount = sppgDocs.filter((doc) => {
+        const analysis = analysisById.get(doc.id);
+        return analysis?.isFlagged === true;
+      }).length;
+
+      return {
+        id: unit.id,
+        name: unit.name,
+        address: unit.address,
+        status: unit.status,
+        lat: parseCoord(unit.lat),
+        lng: parseCoord(unit.lng),
+        capacityPerDay: unit.capacityPerDay,
+        // Verification data for map coloring
+        verificationScore,
+        hasDocumentationToday: sppgDocs.length > 0,
+        flaggedCount,
+        verificationStatus:
+          sppgDocs.length === 0
+            ? 'no_data'
+            : flaggedCount > 0
+              ? 'flagged'
+              : verificationScore !== null && verificationScore >= 80
+                ? 'verified'
+                : 'partial',
+      };
+    });
+
+    return res.json({ success: true, data, date: todayStr });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────
+// NEW: Get documentation with CV analysis for a specific SPPG
+// GET /api/public/sppg/:id/dokumentasi
+// ──────────────────────────────────────────────────────────────
+export const getSppgDokumentasi = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!isUuid(id)) {
+      return res.status(400).json({ success: false, message: 'Format ID SPPG tidak valid' });
+    }
+
+    const [sppgData] = await db.select().from(sppg).where(eq(sppg.id, id));
+    if (!sppgData) {
+      return res.status(404).json({ success: false, message: 'SPPG tidak ditemukan' });
+    }
+
+    const docs = await db
+      .select()
+      .from(mealDocumentation)
+      .where(eq(mealDocumentation.sppgId, id));
+
+    const docIds = docs.map((d) => d.id);
+    const analyses = docIds.length
+      ? await db
+          .select()
+          .from(cvAnalysisResults)
+          .where(eq(cvAnalysisResults.status, 'completed'))
+      : [];
+
+    const analysisById = new Map(analyses.map((a) => [a.documentationId, a]));
+
+    const data = docs.map((doc) => {
+      const analysis = analysisById.get(doc.id) ?? null;
+      return {
+        id: doc.id,
+        photoUrl: doc.photoUrl,
+        notes: doc.notes,
+        productionDate: doc.productionDate,
+        analysisStatus: doc.analysisStatus,
+        createdAt: doc.createdAt,
+        cvAnalysis: analysis
+          ? {
+              matchScore: analysis.matchScore ? Number(analysis.matchScore) : null,
+              isFlagged: analysis.isFlagged,
+              flagReason: analysis.flagReason,
+              detectedFoods: (() => {
+                try { return analysis.detectedFoods ? JSON.parse(analysis.detectedFoods) : []; }
+                catch { return []; }
+              })(),
+              estimatedNutrition: {
+                calories: analysis.estimatedCalories ? Number(analysis.estimatedCalories) : null,
+                protein: analysis.estimatedProtein ? Number(analysis.estimatedProtein) : null,
+                fat: analysis.estimatedFat ? Number(analysis.estimatedFat) : null,
+                carbohydrate: analysis.estimatedCarbs ? Number(analysis.estimatedCarbs) : null,
+              },
+            }
+          : null,
+      };
+    });
+
+    return res.json({ success: true, data });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }

@@ -28,6 +28,7 @@ const demoPassword = 'password123';
 async function clearExistingData() {
   await db.delete(schema.notifications);
   await db.delete(schema.schoolReports);
+  await db.delete(schema.cvAnalysisResults);
   await db.delete(schema.mealDocumentation);
   await db.delete(schema.menuUploadHistory);
   await db.delete(schema.menus);
@@ -52,7 +53,36 @@ export async function seedAll() {
     await db.insert(schema.menus).values(menusSeed);
     await db.insert(schema.schoolReports).values(reportsSeed);
     await db.insert(schema.notifications).values(notificationsSeed);
-    await db.insert(schema.mealDocumentation).values(mealDocumentationSeed);
+    const docsToInsert = mealDocumentationSeed.map(doc => ({
+      ...doc,
+      analysisStatus: 'completed' as const,
+    }));
+    const insertedDocs = await db.insert(schema.mealDocumentation).values(docsToInsert).returning();
+
+    // Create CV Analysis results for the inserted meal documentation (simulate 80-95% match for most, one flag)
+    const cvResults = insertedDocs.map((doc, i) => {
+      const isFlagged = i === 1; // Simulate one flagged documentation for demo purposes
+      return {
+        documentationId: doc.id,
+        status: 'completed' as const,
+        detectedFoods: JSON.stringify([
+          { name: 'nasi putih', confidence: 0.95, portionGrams: 200 },
+          { name: 'ayam goreng', confidence: 0.88, portionGrams: 100 },
+          { name: 'sayur bening', confidence: 0.76, portionGrams: 150 },
+        ]),
+        estimatedCalories: (520.5).toString(),
+        estimatedProtein: (28.5).toString(),
+        estimatedFat: (15.2).toString(),
+        estimatedCarbs: (68.0).toString(),
+        matchScore: isFlagged ? (55.0).toString() : (85.0 + i).toString(),
+        isFlagged,
+        flagReason: isFlagged ? 'Deteksi sayur dan ayam tidak sesuai dengan menu yang dilaporkan.' : null,
+        processingTimeMs: 1200 + i * 50,
+        analyzedAt: new Date(),
+      };
+    });
+
+    await db.insert(schema.cvAnalysisResults).values(cvResults);
     await db.insert(schema.articles).values(articlesSeed);
 
     console.log('Seed completed successfully.');

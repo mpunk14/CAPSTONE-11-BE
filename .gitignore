@@ -2,3 +2,6 @@ node_modules
 .env
 dist
 *.log
+*.md
+!README.md
+!AGENTS.md

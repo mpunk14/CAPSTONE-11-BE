@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { mealDocumentation, menus, schoolReports, schools, sppg } from "../db/skema";
 import { isUuid } from "../utils/uuid";
 import { cloudinary } from "../config/cloudinary";
+import { triggerCvAnalysis } from "../services/cv.service";
 
 type SppgRow = typeof sppg.$inferSelect;
 type SchoolRow = typeof schools.$inferSelect;
@@ -361,8 +362,14 @@ export const createMealDocumentation = async (req: Request, res: Response): Prom
 
     return res.status(201).json({
       success: true,
-      message: "Dokumentasi menu berhasil disimpan",
+      message: "Dokumentasi menu berhasil disimpan. Analisis CV sedang diproses...",
       data: [inserted],
+    });
+
+    // Fire-and-forget CV analysis — must be AFTER res.status(201).json() so it
+    // doesn't block the HTTP response. Rule 10 (AGENTS.md): all CV calls via cv.service.
+    triggerCvAnalysis(inserted.id, photoUrl, sppgData.id, productionDate).catch((err) => {
+      console.error('[sppgControllers] Background CV trigger error:', err?.message);
     });
   } catch (error) {
     console.error("Error POST createMealDocumentation:", error);

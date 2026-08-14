@@ -104,9 +104,10 @@ const normalizeRegisterRole = (role: string) => {
 };
 
 export const registerService = async (payload: RegisterPayload) => {
-  const role = normalizeRegisterRole(payload.role);
+  let role = payload.role;
+  if (role === "sekolah") role = "school";
 
-  if (role !== "sppg" && role !== "school") {
+  if (!role || (role !== "sppg" && role !== "school")) {
     return { status: 400, data: { success: false, message: "Role tidak valid" } };
   }
 
@@ -119,7 +120,9 @@ export const registerService = async (payload: RegisterPayload) => {
     return { status: 400, data: { success: false, message: "Data registrasi belum lengkap" } };
   }
 
+  console.log("Checking existing user...");
   const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+  console.log("Existing user check complete.", !!existingUser);
   if (existingUser) {
     return { status: 409, data: { success: false, message: "Email sudah terdaftar" } };
   }
@@ -127,43 +130,46 @@ export const registerService = async (payload: RegisterPayload) => {
   const passwordHash = await bcrypt.hash(payload.password, 10);
 
   try {
-    const created = await db.transaction(async (tx) => {
-      const [newUser] = await tx
-        .insert(users)
+    console.log("Inserting user...");
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        email,
+        password: passwordHash,
+        role,
+      })
+      .returning({
+        id: users.id,
+        email: users.email,
+        role: users.role,
+      });
+    console.log("User inserted.", newUser);
+
+    let profileId = "";
+
+    if (role === "sppg") {
+      const [newSppg] = await db
+        .insert(sppg)
         .values({
-          email,
-          password: passwordHash,
-          role,
+          userId: newUser.id,
+          name,
+          sppgCode: code,
+          address,
+          personInCharge: payload.phone?.trim() || "Belum diisi",
         })
-        .returning({
-          id: users.id,
-          email: users.email,
-          role: users.role,
-        });
+        .returning({ id: sppg.id });
 
-      if (role === "sppg") {
-        const [newSppg] = await tx
-          .insert(sppg)
-          .values({
-            userId: newUser.id,
-            name,
-            sppgCode: code,
-            address,
-            personInCharge: payload.phone?.trim() || "Belum diisi",
-          })
-          .returning({ id: sppg.id });
-
-        return { user: newUser, profileId: newSppg.id };
-      }
-
+      profileId = newSppg.id;
+    } else {
       let sppgId: string | null = null;
       const selectedSppgName = payload.sppg?.trim();
       if (selectedSppgName) {
-        const [partnerSppg] = await tx.select({ id: sppg.id }).from(sppg).where(eq(sppg.name, selectedSppgName));
+        const [partnerSppg] = await db.select({ id: sppg.id }).from(sppg).where(eq(sppg.name, selectedSppgName));
         sppgId = partnerSppg?.id ?? null;
       }
 
-      const [newSchool] = await tx
+      console.log("Inserting school...");
+      const [newSchool] = await db
         .insert(schools)
         .values({
           userId: newUser.id,
@@ -173,9 +179,12 @@ export const registerService = async (payload: RegisterPayload) => {
           sppgId,
         })
         .returning({ id: schools.id });
+      console.log("School inserted.", newSchool);
+      profileId = newSchool.id;
+    }
 
-      return { user: newUser, profileId: newSchool.id };
-    });
+    console.log("Returning success...");
+    const created = { user: newUser, profileId };
 
     return {
       status: 201,

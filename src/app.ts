@@ -10,6 +10,7 @@ import publicRoutes from "./routes/publicRoutes";
 import sekolahRoutes from "./routes/schoolRoutes";
 import sppgRoutes from "./routes/sppgRoutes";
 import uploadRoutes from "./routes/uploadRoutes";
+import dokumentasiRoutes from "./routes/dokumentasiRoutes";
 import { errorMiddleware } from "./middlewares/errorMiddleware";
 
 const app = express();
@@ -26,6 +27,7 @@ app.use("/api/menu", menuRoutes);
 app.use("/api/notifikasi", notifikasiRoutes);
 app.use("/api/notifications", notifikasiRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/dokumentasi", dokumentasiRoutes);
 app.use("/api", publicRoutes);
 app.use(errorMiddleware);
 

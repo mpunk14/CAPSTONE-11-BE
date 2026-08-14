@@ -8,6 +8,13 @@
       "when": 1776181292696,
       "tag": "0000_modern_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786635624399,
+      "tag": "0001_gifted_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }
